@@ -85,7 +85,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="fecha" className="text-xs font-bold text-slate-500 uppercase">Fecha</Label>
+              <Label htmlFor="fecha" className="text-xs font-bold text-slate-500 uppercase">Fecha de inicio</Label>
               <Input 
                 id="fecha" 
                 type="date" 

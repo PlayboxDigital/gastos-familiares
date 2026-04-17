@@ -7,6 +7,11 @@ export const presupuestosService = {
       .from('presupuestos_categoria')
       .select('*');
     
+    console.log("TABLA:", "presupuestos_categoria")
+    console.log("ERROR:", error)
+    console.log("ROWS:", Array.isArray(data) ? data.length : null)
+    console.log("DATA:", data)
+    
     if (error) {
       throw new Error(`Error al obtener presupuestos: ${error.message}`);
     }

@@ -32,7 +32,7 @@ import {
   Pizza,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Expense, CategoryConfig, PaymentStatus } from '../types';
+import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial } from '../types';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion } from 'motion/react';
@@ -41,6 +41,7 @@ import { getEstadoVencimiento } from '../estadoVencimiento';
 interface DashboardProps {
   expenses: Expense[];
   categories: CategoryConfig[];
+  history?: GastoPagoHistorial[];
   onQuickPayExpense?: (expense: Expense) => void;
 }
 
@@ -57,20 +58,45 @@ const getMontoExigible = (expense: ExpenseWithCredit): number => {
   return Math.max(0, expense.monto - (expense.saldo_a_favor_aplicado ?? 0));
 };
 
-const getEstadoPagoReal = (expense: ExpenseWithCredit): PaymentStatus => {
+const getEstadoPagoReal = (
+  expense: ExpenseWithCredit, 
+  history: GastoPagoHistorial[] = [],
+  currentMonth: Date = new Date()
+): PaymentStatus => {
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth() + 1;
+
+  // Verificamos si hay un pago registrado para este gasto ESPECIFICO en este periodo
+  const paymentForPeriod = history.find(h => 
+    h.gasto_id === expense.id && 
+    h.periodo_anio === year && 
+    h.periodo_mes === month
+  );
+
+  if (paymentForPeriod) {
+    return 'Pagado';
+  }
+
   const montoExigible = getMontoExigible(expense);
   const totalAbonado = expense.total_abonado ?? 0;
 
-  if (montoExigible <= 0) return 'Pagado';
-  if (totalAbonado >= montoExigible) return 'Pagado';
-  if (totalAbonado > 0) return 'Parcial';
+  // Si no hay pago en el historial, pero el estado es Pagado y no tiene historial previo, 
+  // respetamos la marca manual (retrocompatibilidad)
+  if (expense.estado_pago === 'Pagado' && !history.some(h => h.gasto_id === expense.id)) {
+    return 'Pagado';
+  }
 
+  if (montoExigible <= 0) return 'Pagado';
+  // Si no hay registro en el historial para este mes, lo consideramos pendiente para este mes 
+  // (a menos que el total abonado sea suficiente para cubrir el monto del mes y no usemos historial aún)
+  
   return 'Pendiente';
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({
   expenses = [],
   categories = [],
+  history = [],
   onQuickPayExpense,
 }) => {
   const currentMonth = new Date();
@@ -79,17 +105,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const monthEnd = endOfMonth(currentMonth);
 
   const monthlyExpenses = useMemo(() => {
-    return expenses.filter((e) => {
-      if (!e.fecha) return false;
-      try {
-        const date = parseISO(e.fecha);
-        return isWithinInterval(date, { start: monthStart, end: monthEnd });
-      } catch (err) {
-        console.error('Error parsing date:', e.fecha, err);
-        return false;
-      }
-    });
-  }, [expenses, monthStart, monthEnd]);
+    console.log("DASHBOARD_CALC_1_START: monthlyExpenses", expenses.length);
+    try {
+      const result = expenses.filter((e) => {
+        if (!e.fecha || e.archived) return false;
+        try {
+          const date = parseISO(e.fecha);
+          // Un gasto es exigible este mes si su fecha de inicio es anterior o igual a este mes
+          return startOfMonth(date) <= monthEnd;
+        } catch (err) {
+          console.error('Error parsing date:', e.fecha, err);
+          return false;
+        }
+      });
+      console.log("DASHBOARD_CALC_1_END: monthlyExpenses", result.length);
+      return result;
+    } catch (e) {
+      console.error("APP_ERROR_DERIVADO_EXPENSES_monthlyExpenses:", e, expenses);
+      return [];
+    }
+  }, [expenses, monthEnd]);
+
+  const getStatus = (e: Expense) => getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
 
   const totalMonthly = useMemo(
     () => monthlyExpenses.reduce((sum, e) => sum + e.monto, 0),
@@ -99,29 +136,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalPagado = useMemo(
     () =>
       monthlyExpenses.reduce((sum, e) => {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth() + 1;
+        const paidThisMonth = history
+          .filter(h => h.gasto_id === e.id && h.periodo_anio === year && h.periodo_mes === month)
+          .reduce((s, h) => s + h.monto_pagado, 0);
+        
         const montoExigible = getMontoExigible(e as ExpenseWithCredit);
-        const totalAbonado = e.total_abonado ?? 0;
-        return sum + Math.min(totalAbonado, montoExigible);
+        return sum + Math.min(paidThisMonth, montoExigible);
       }, 0),
-    [monthlyExpenses]
+    [monthlyExpenses, history, currentMonth]
   );
 
   const totalPendiente = useMemo(
     () =>
       monthlyExpenses.reduce((sum, e) => {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth() + 1;
+        const paidThisMonth = history
+          .filter(h => h.gasto_id === e.id && h.periodo_anio === year && h.periodo_mes === month)
+          .reduce((s, h) => s + h.monto_pagado, 0);
+
         const montoExigible = getMontoExigible(e as ExpenseWithCredit);
-        const saldo = Math.max(0, montoExigible - (e.total_abonado ?? 0));
+        const saldo = Math.max(0, montoExigible - paidThisMonth);
         return sum + saldo;
       }, 0),
-    [monthlyExpenses]
+    [monthlyExpenses, history, currentMonth]
   );
 
   const pagosRealizados = useMemo(
     () =>
       monthlyExpenses
         .filter((e) => {
-          const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit);
-          return (e.total_abonado ?? 0) > 0 || estadoPagoReal === 'Pagado';
+          const estadoPagoReal = getStatus(e);
+          return estadoPagoReal === 'Pagado';
         })
         .sort((a, b) => {
           const aMonto = Math.min(
@@ -140,19 +188,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const pagosPendientes = useMemo(
     () =>
       monthlyExpenses
-        .filter((e) => getEstadoPagoReal(e as ExpenseWithCredit) !== 'Pagado')
+        .filter((e) => getStatus(e) !== 'Pagado')
         .sort((a, b) => {
-          const saldoA = Math.max(
-            0,
-            getMontoExigible(a as ExpenseWithCredit) - (a.total_abonado ?? 0)
-          );
-          const saldoB = Math.max(
-            0,
-            getMontoExigible(b as ExpenseWithCredit) - (b.total_abonado ?? 0)
-          );
+          const year = currentMonth.getFullYear();
+          const month = currentMonth.getMonth() + 1;
+          
+          const paidA = history.filter(h => h.gasto_id === a.id && h.periodo_anio === year && h.periodo_mes === month).reduce((s, h) => s + h.monto_pagado, 0);
+          const paidB = history.filter(h => h.gasto_id === b.id && h.periodo_anio === year && h.periodo_mes === month).reduce((s, h) => s + h.monto_pagado, 0);
+
+          const saldoA = Math.max(0, getMontoExigible(a as ExpenseWithCredit) - paidA);
+          const saldoB = Math.max(0, getMontoExigible(b as ExpenseWithCredit) - paidB);
           return saldoB - saldoA;
         }),
-    [monthlyExpenses]
+    [monthlyExpenses, history, currentMonth]
   );
 
   const categoryData = useMemo(() => {
@@ -196,9 +244,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         (e as any).esencial === true ||
         (e as any).tipo === 'esencial';
 
-      return esEsencial && getEstadoPagoReal(e as ExpenseWithCredit) !== 'Pagado';
+      return esEsencial && getStatus(e) !== 'Pagado';
     });
-  }, [monthlyExpenses]);
+  }, [monthlyExpenses, history, currentMonth]);
 
   const totalPendingEssentialAmount = useMemo(() => {
     return pendingEssentialExpenses.reduce((sum, e) => {
@@ -240,32 +288,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const diaActual = new Date().getDate();
 
   const historyData = useMemo(() => {
-    const last6Months = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      last6Months.push({
-        month: format(d, 'MMM', { locale: es }),
-        key: format(d, 'yyyy-MM'),
-        total: 0,
-      });
-    }
-
-    expenses.forEach((e) => {
-      if (!e.fecha) return;
-      try {
-        const date = parseISO(e.fecha);
-        const key = format(date, 'yyyy-MM');
-        const monthEntry = last6Months.find((m) => m.key === key);
-        if (monthEntry) {
-          monthEntry.total += e.monto;
-        }
-      } catch (err) {
-        console.error('Error parsing date for history:', e.fecha, err);
+    console.log("DASHBOARD_CALC_HISTORY_START", expenses.length);
+    try {
+      const last6Months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        last6Months.push({
+          month: format(d, 'MMM', { locale: es }),
+          key: format(d, 'yyyy-MM'),
+          total: 0,
+        });
       }
-    });
 
-    return last6Months;
+      expenses.forEach((e) => {
+        if (!e.fecha) return;
+        try {
+          const date = parseISO(e.fecha);
+          const key = format(date, 'yyyy-MM');
+          const monthEntry = last6Months.find((m) => m.key === key);
+          if (monthEntry) {
+            monthEntry.total += e.monto;
+          }
+        } catch (err) {
+          console.error('Error parsing date for history:', e.fecha, err);
+        }
+      });
+
+      return last6Months;
+    } catch (e) {
+      console.error("APP_ERROR_DERIVADO_EXPENSES_historyData:", e, expenses);
+      return [];
+    }
   }, [expenses]);
 
   const essentialOverdueExpenses = useMemo(() => {
@@ -305,7 +359,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
-            ¡Hola, Familia! <span className="text-blue-600 italic">GetaGasto</span>
+            ¡Hola, Familia!
           </h2>
           <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
             Resumen de actividad • {currentMonthName} {new Date().getFullYear()}

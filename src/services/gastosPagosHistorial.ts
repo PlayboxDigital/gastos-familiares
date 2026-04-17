@@ -21,6 +21,11 @@ export const gastosPagosHistorialService = {
       .select('*')
       .order('fecha_pago', { ascending: false });
     
+    console.log("TABLA:", "gastos_pagos_historial")
+    console.log("ERROR:", error)
+    console.log("ROWS:", Array.isArray(data) ? data.length : null)
+    console.log("DATA:", data)
+
     if (error) {
       throw new Error(`Error al obtener historial de pagos: ${error.message}`);
     }
@@ -52,5 +57,29 @@ export const gastosPagosHistorialService = {
     }
 
     return data[0] as GastoPagoHistorial;
+  },
+
+  async eliminarPagoHistorial(pagoId: string): Promise<void> {
+    const { error } = await supabase
+      .from('gastos_pagos_historial')
+      .delete()
+      .eq('id', pagoId);
+
+    if (error) {
+      throw new Error(`Error al eliminar registro del historial: ${error.message}`);
+    }
+  },
+
+  async obtenerHistorialPorGasto(gastoId: string): Promise<GastoPagoHistorial[]> {
+    const { data, error } = await supabase
+      .from('gastos_pagos_historial')
+      .select('*')
+      .eq('gasto_id', gastoId)
+      .order('fecha_pago', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Error al obtener historial del gasto: ${error.message}`);
+    }
+    return (data as GastoPagoHistorial[]) || [];
   }
 };

@@ -17,6 +17,7 @@ export interface Expense {
   servicio_clave?: string;
   created_at?: string;
   dia_vencimiento?: number;
+  archived?: boolean;
 }
 
 export interface GastoPagoHistorial {

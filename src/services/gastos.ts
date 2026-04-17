@@ -102,10 +102,16 @@ export const registerPaymentWithCredit = (
 
 export const gastosService = {
   async obtenerGastos(): Promise<Expense[]> {
+    console.log("SERVICIO_ACTIVO: src/services/gastos.ts");
     const { data, error } = await supabase
       .from('gastos')
       .select('*')
       .order('fecha', { ascending: false });
+
+    console.log("TABLA:", "gastos")
+    console.log("ERROR:", error)
+    console.log("ROWS:", Array.isArray(data) ? data.length : null)
+    console.log("DATA:", data)
 
     if (error) {
       throw new Error(`Error al obtener gastos: ${error.message}`);
@@ -136,6 +142,20 @@ export const gastosService = {
 
     if (error) {
       throw new Error(`Error al actualizar gasto: ${error.message}`);
+    }
+  },
+  
+  async archivarGasto(id: string, archived: boolean): Promise<void> {
+    console.log("ARCHIVAR_GASTO_ID:", id);
+    console.log("ARCHIVAR_NUEVO_VALOR:", archived);
+    
+    const { error } = await supabase
+      .from('gastos')
+      .update({ archived })
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Error al archivar gasto: ${error.message}`);
     }
   },
 

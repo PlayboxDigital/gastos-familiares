@@ -94,6 +94,11 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    console.log("APP_GASTOS_4_ESTADO_GASTOS:", expenses);
+    console.log("APP_GASTOS_4_ROWS:", Array.isArray(expenses) ? expenses.length : null);
+  }, [expenses]);
+
   const handleMigrateData = async () => {
     const saved = localStorage.getItem('getagasto_expenses');
     if (!saved) return;
@@ -107,13 +112,18 @@ export default function App() {
         const newExpenses: Expense[] = [];
 
         const getExpenseKey = (e: any) => {
-          const fecha = e.fecha || e.date || '';
-          const monto = Number(e.monto || e.amount || 0).toFixed(2);
-          const cat = (e.categoria || e.category || '').trim().toLowerCase();
-          const sub = (e.subcategoria || e.subcategory || '').trim().toLowerCase();
-          const resp = (e.responsable || e.responsible || '').trim().toLowerCase();
-          const conc = (e.concepto || e.description || '').trim().toLowerCase();
-          return `${fecha}|${monto}|${cat}|${sub}|${resp}|${conc}`;
+          try {
+            const fecha = e.fecha || e.date || '';
+            const monto = Number(e.monto || e.amount || 0).toFixed(2);
+            const cat = (e.categoria || e.category || '').trim().toLowerCase();
+            const sub = (e.subcategoria || e.subcategory || '').trim().toLowerCase();
+            const resp = (e.responsable || e.responsible || '').trim().toLowerCase();
+            const conc = (e.concepto || e.description || '').trim().toLowerCase();
+            return `${fecha}|${monto}|${cat}|${sub}|${resp}|${conc}`;
+          } catch (err) {
+            console.error("APP_ERROR_DERIVADO_EXPENSES_getExpenseKey:", err, e);
+            return String(Math.random());
+          }
         };
 
         const existingKeys = new Set(expenses.map(getExpenseKey));
@@ -155,7 +165,9 @@ export default function App() {
         }
 
         if (migratedCount > 0 || duplicateCount > 0) {
-          setExpenses((prev) => [...newExpenses, ...prev]);
+          const nextVal = [...newExpenses, ...expenses];
+          console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEMIGRATEDATA:", nextVal);
+          setExpenses(nextVal);
           localStorage.removeItem('getagasto_expenses');
           localStorage.removeItem('getagasto_categories');
           setHasLegacyData(false);
@@ -182,17 +194,64 @@ export default function App() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [dbExpenses, dbCategories, dbHistory] = await Promise.all([
+        console.log("APP_GASTOS_1_ANTES_FETCH")
+        console.log("COMPONENTE_QUE_LLAMA_GASTOS: src/App.tsx");
+        
+        const results = await Promise.allSettled([
           gastosService.obtenerGastos(),
           presupuestosService.obtenerPresupuestos(),
           gastosPagosHistorialService.obtenerTodoElHistorial(),
         ]);
 
-        setExpenses(dbExpenses);
+        const gastosResult = results[0];
+        const presupuestosResult = results[1];
+        const historialResult = results[2];
+
+        console.log("APP_FETCH_GASTOS_STATUS:", gastosResult.status);
+        console.log("APP_FETCH_PRESUPUESTOS_STATUS:", presupuestosResult.status);
+        console.log("APP_FETCH_HISTORIAL_STATUS:", historialResult.status);
+
+        // Procesar Gastos (Crítico)
+        let dbExpenses: Expense[] = [];
+        if (gastosResult.status === 'fulfilled') {
+          dbExpenses = gastosResult.value;
+        } else {
+          console.error("APP_FETCH_GASTOS_ERROR:", gastosResult.reason);
+        }
+
+        // Procesar Presupuestos (Fallback a CATEGORIES si falla)
+        let dbCategories: CategoryConfig[] = [];
+        if (presupuestosResult.status === 'fulfilled') {
+          dbCategories = presupuestosResult.value;
+        } else {
+          console.error("APP_FETCH_PRESUPUESTOS_ERROR:", presupuestosResult.reason);
+        }
+
+        // Procesar Historial (Fallback a [] si falla)
+        let dbHistory: GastoPagoHistorial[] = [];
+        if (historialResult.status === 'fulfilled') {
+          dbHistory = historialResult.value;
+        } else {
+          console.error("APP_FETCH_HISTORIAL_ERROR:", historialResult.reason);
+        }
+
+        console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
+        console.log("APP_GASTOS_2_ROWS:", Array.isArray(dbExpenses) ? dbExpenses.length : null);
+
+        console.log("APP_GASTOS_3_ANTES_SETSTATE:", dbExpenses);
+
+        console.log("APP_GASTOS_3A_SETSTATE_INICIO")
+        setExpenses((prev) => {
+          console.log("APP_GASTOS_3B_PREV_STATE:", prev)
+          console.log("APP_GASTOS_3C_NEW_STATE:", dbExpenses)
+          return dbExpenses
+        })
+        console.log("APP_GASTOS_3D_SETSTATE_EJECUTADO")
+
         setCategories(dbCategories.length > 0 ? dbCategories : CATEGORIES);
         setGlobalHistory(dbHistory);
-      } catch (error) {
-        console.error('Error al cargar datos desde Supabase:', error);
+      } catch (e) {
+        console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       } finally {
         setIsLoading(false);
       }
@@ -206,11 +265,13 @@ export default function App() {
       if (newExpense.id) {
         const { id, ...data } = newExpense;
         await gastosService.actualizarGasto(id, data);
+        console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEADDEXPENSE_UPDATE:", id);
         setExpenses((prev) =>
           prev.map((e) => (e.id === id ? ({ ...e, ...data } as Expense) : e))
         );
       } else {
         const createdExpense = await gastosService.crearGasto(newExpense);
+        console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEADDEXPENSE_CREATE:", createdExpense);
         setExpenses((prev) => [createdExpense, ...prev]);
       }
     } catch (error) {
@@ -222,6 +283,7 @@ export default function App() {
 
   const handleDeleteExpense = async (id: string) => {
     try {
+      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEDELETEEXPENSE:", id);
       setExpenses((prev) => prev.filter((e) => e.id !== id));
       await gastosService.eliminarGasto(id);
     } catch (error) {
@@ -251,6 +313,7 @@ export default function App() {
     setUpdatingPaymentIds((prev) => new Set(prev).add(id));
 
     try {
+      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLETOGGLEPAYMENT_1:", updateData);
       setExpenses((prev) =>
         prev.map((e) => (e.id === id ? ({ ...e, ...updateData } as Expense) : e))
       );
@@ -258,6 +321,7 @@ export default function App() {
       await gastosService.actualizarGasto(id, updateData as any);
     } catch (error) {
       console.error('Error al cambiar estado de pago (haciendo rollback):', error);
+      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLETOGGLEPAYMENT_ROLLBACK:", originalExpense);
       setExpenses((prev) => prev.map((e) => (e.id === id ? originalExpense : e)));
     } finally {
       setUpdatingPaymentIds((prev) => {
@@ -305,6 +369,7 @@ export default function App() {
         fecha_pago: pago.fecha_pago,
       };
 
+      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLECONFIRMPAYMENT_1:", updateData);
       setExpenses((prev) =>
         prev.map((e) => (e.id === expenseId ? ({ ...e, ...updateData } as Expense) : e))
       );
@@ -317,6 +382,7 @@ export default function App() {
       setIsPaymentModalOpen(false);
     } catch (error) {
       console.error('Error al confirmar pago:', error);
+      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLECONFIRMPAYMENT_ROLLBACK:", originalExpense);
       setExpenses((prev) => prev.map((e) => (e.id === expenseId ? originalExpense : e)));
       throw error;
     } finally {
@@ -325,6 +391,65 @@ export default function App() {
         next.delete(expenseId);
         return next;
       });
+    }
+  };
+
+  const handleDeletePayment = async (pagoId: string, gastoId: string) => {
+    if (!pagoId) return;
+
+    if (!confirm('¿Seguro que querés eliminar solo este pago?\n\nNo se eliminará el gasto original.\nEl sistema recalculará automáticamente el saldo pendiente y el estado del movimiento.')) {
+      return;
+    }
+
+    try {
+      console.log("ELIMINAR_PAGO_ID:", pagoId);
+      console.log("GASTO_ASOCIADO_ID:", gastoId);
+
+      // 1. Eliminar el pago de la DB
+      await gastosPagosHistorialService.eliminarPagoHistorial(pagoId);
+
+      // 2. Obtener el historial actualizado de este gasto para recalcular
+      const remainingPayments = await gastosPagosHistorialService.obtenerHistorialPorGasto(gastoId);
+      const totalAbonadoNuevo = remainingPayments.reduce((sum, p) => sum + p.monto_pagado, 0);
+      
+      const ultimaFechaPago = remainingPayments.length > 0 
+        ? remainingPayments[0].fecha_pago // Ya vienen ordenados desc en el servicio
+        : null;
+
+      // 3. Determinar el nuevo estado del gasto
+      const originalExpense = expenses.find(e => e.id === gastoId);
+      if (originalExpense) {
+        const expenseWithNewPaid: ExpenseWithCredit = {
+          ...originalExpense,
+          total_abonado: totalAbonadoNuevo,
+          fecha_pago: ultimaFechaPago
+        };
+        const nuevoEstado = getEstadoPagoReal(expenseWithNewPaid, totalAbonadoNuevo);
+        
+        console.log("TOTAL_ABONADO_RECALCULADO:", totalAbonadoNuevo);
+        console.log("ESTADO_RECALCULADO:", nuevoEstado);
+
+        const updateData = {
+          total_abonado: totalAbonadoNuevo,
+          estado_pago: nuevoEstado,
+          fecha_pago: ultimaFechaPago
+        };
+
+        // 4. Actualizar el gasto en Supabase
+        await gastosService.actualizarGasto(gastoId, updateData);
+
+        // 5. Refrescar estado local de gastos
+        setExpenses(prev => prev.map(e => e.id === gastoId ? { ...e, ...updateData } : e));
+      }
+
+      // 6. Refrescar historial global de pagos
+      const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
+      setGlobalHistory(updatedHistory);
+
+      alert("Pago eliminado correctamente");
+    } catch (error) {
+      console.error('Error al eliminar pago:', error);
+      alert("No se pudo eliminar el pago");
     }
   };
 
@@ -344,9 +469,23 @@ export default function App() {
     }
   };
 
+  const handleToggleArchive = async (id: string, archived: boolean) => {
+    try {
+      await gastosService.archivarGasto(id, archived);
+      setExpenses(prev => prev.map(e => e.id === id ? { ...e, archived } : e));
+      alert(archived ? "Movimiento archivado" : "Movimiento restaurado");
+    } catch (error) {
+      console.error('Error al archivar/restaurar gasto:', error);
+      alert("No se pudo cambiar el estado de archivado");
+    }
+  };
+
   const renderContent = () => {
+    console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
+    
     switch (activeTab) {
       case 'dashboard':
+        console.log("APP_COMPONENTE_CON_EXPENSES: Dashboard", expenses.length);
         return (
           <Dashboard
             expenses={expenses}
@@ -354,23 +493,24 @@ export default function App() {
             onQuickPayExpense={handleActionPayment}
           />
         );
-      case 'expenses':
+      case 'history':
         return (
-          <ExpenseList
+          <PaymentHistory 
+            history={globalHistory} 
             expenses={expenses}
-            onDelete={handleDeleteExpense}
-            onEdit={handleEditExpense}
-            onTogglePayment={handleTogglePayment}
             onActionPayment={handleActionPayment}
+            onEdit={handleEditExpense}
+            onDelete={handleDeleteExpense}
+            onDeletePayment={handleDeletePayment}
             onShowHistory={handleShowHistory}
-            updatingPaymentIds={updatingPaymentIds}
+            onTogglePayment={handleTogglePayment}
+            onToggleArchive={handleToggleArchive}
           />
         );
-      case 'history':
-        return <PaymentHistory history={globalHistory} />;
       case 'settings':
         return <Settings categories={categories} onUpdateLimit={handleUpdateLimit} />;
       default:
+        console.log("APP_COMPONENTE_CON_EXPENSES: Dashboard (default)", expenses.length);
         return (
           <Dashboard
             expenses={expenses}
@@ -406,16 +546,10 @@ export default function App() {
             label="Dashboard"
           />
           <SidebarLink
-            active={activeTab === 'expenses'}
-            onClick={() => setActiveTab('expenses')}
-            icon={<ListOrdered className="w-5 h-5" />}
-            label="Movimientos"
-          />
-          <SidebarLink
             active={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
             icon={<HistoryIcon className="w-5 h-5" />}
-            label="Historial de Pagos"
+            label="Historial de movimientos"
           />
           <SidebarLink
             active={activeTab === 'settings'}
@@ -458,10 +592,8 @@ export default function App() {
             <h2 className="text-lg font-bold text-slate-900 capitalize">
               {activeTab === 'dashboard'
                 ? 'Panel de Control'
-                : activeTab === 'expenses'
-                ? 'Movimientos'
                 : activeTab === 'history'
-                ? 'Historial de Pagos'
+                ? 'Historial de movimientos'
                 : 'Configuración'}
             </h2>
           </div>
@@ -554,6 +686,7 @@ export default function App() {
                   <Dashboard
                     expenses={expenses}
                     categories={categories}
+                    history={globalHistory}
                     onQuickPayExpense={handleActionPayment}
                   />
                 ) : (
@@ -581,11 +714,6 @@ export default function App() {
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}
           icon={<LayoutDashboard className="w-6 h-6" />}
-        />
-        <MobileNavLink
-          active={activeTab === 'expenses'}
-          onClick={() => setActiveTab('expenses')}
-          icon={<ListOrdered className="w-6 h-6" />}
         />
         <MobileNavLink
           active={activeTab === 'history'}

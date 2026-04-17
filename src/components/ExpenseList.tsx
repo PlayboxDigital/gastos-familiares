@@ -81,35 +81,42 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   };
 
   const filteredExpenses = useMemo(() => {
-    const result = expenses.filter((e) => {
-      const subcategoria = e.subcategoria || '';
-      const concepto = e.concepto || '';
-      const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit);
+    console.log("EXPENSELIST_CALC_FILTER_START", expenses.length);
+    try {
+      const result = expenses.filter((e) => {
+        const subcategoria = e.subcategoria || '';
+        const concepto = e.concepto || '';
+        const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit);
 
-      const matchesSearch =
-        subcategoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        concepto.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch =
+          subcategoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          concepto.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesCategory = !categoryFilter || categoryFilter === 'all' || e.categoria === categoryFilter;
-      const matchesResponsible = !responsibleFilter || responsibleFilter === 'all' || e.responsable === responsibleFilter;
-      const matchesPriority = !priorityFilter || priorityFilter === 'all' || e.prioridad === priorityFilter;
-      const matchesStatus = !statusFilter || statusFilter === 'all' || estadoPagoReal === statusFilter;
+        const matchesCategory = !categoryFilter || categoryFilter === 'all' || e.categoria === categoryFilter;
+        const matchesResponsible = !responsibleFilter || responsibleFilter === 'all' || e.responsable === responsibleFilter;
+        const matchesPriority = !priorityFilter || priorityFilter === 'all' || e.prioridad === priorityFilter;
+        const matchesStatus = !statusFilter || statusFilter === 'all' || estadoPagoReal === statusFilter;
 
-      return matchesSearch && matchesCategory && matchesResponsible && matchesPriority && matchesStatus;
-    });
-
-    if (sortConfig) {
-      result.sort((a, b) => {
-        const aValue = a[sortConfig.key] || '';
-        const bValue = b[sortConfig.key] || '';
-
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
+        return matchesSearch && matchesCategory && matchesResponsible && matchesPriority && matchesStatus;
       });
-    }
 
-    return result;
+      if (sortConfig) {
+        result.sort((a, b) => {
+          const aValue = a[sortConfig.key] || '';
+          const bValue = b[sortConfig.key] || '';
+
+          if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+          if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+
+      console.log("EXPENSELIST_CALC_FILTER_END", result.length);
+      return result;
+    } catch (e) {
+      console.error("APP_ERROR_DERIVADO_EXPENSES_filteredExpenses:", e, expenses);
+      return [];
+    }
   }, [expenses, searchTerm, categoryFilter, responsibleFilter, priorityFilter, statusFilter, sortConfig]);
 
   const totalFiltered = useMemo(

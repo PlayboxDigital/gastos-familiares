@@ -52,6 +52,11 @@ type ExpenseWithCredit = Expense & {
   saldo_a_favor_generado?: number;
 };
 
+const MONTHS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
 export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
@@ -119,6 +124,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     entidad_pago: '',
     referencia_pago: '',
     observaciones: '',
+    periodo_mes: new Date().getMonth() + 1,
+    periodo_anio: new Date().getFullYear(),
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -135,6 +142,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         entidad_pago: '',
         referencia_pago: '',
         observaciones: '',
+        periodo_mes: new Date().getMonth() + 1,
+        periodo_anio: new Date().getFullYear(),
       });
       setSelectedFile(null);
       setErrorMsg(null);
@@ -223,28 +232,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         };
       }
 
-      let periodoDate: Date | null = null;
-
-      if (expenseData.fecha) {
-        try {
-          const parsed = parseISO(expenseData.fecha);
-          if (!isNaN(parsed.getTime())) {
-            periodoDate = parsed;
-          }
-        } catch {
-          periodoDate = null;
-        }
-      }
-
-      if (!periodoDate) {
-        periodoDate = new Date(formData.fecha_pago);
-      }
-
       const pago: GastoPagoHistorialInput = {
         gasto_id: expenseData.id,
         servicio_clave: expenseData.servicio_clave || expenseData.concepto || '',
-        periodo_anio: periodoDate.getFullYear(),
-        periodo_mes: periodoDate.getMonth() + 1,
+        periodo_anio: formData.periodo_anio,
+        periodo_mes: formData.periodo_mes,
         fecha_pago: formData.fecha_pago,
         monto_pagado: montoPagadoSeguro,
         moneda: 'ARS',
@@ -448,6 +440,46 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
             </div>
           )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Mes del Período
+              </Label>
+              <Select
+                value={formData.periodo_mes.toString()}
+                onValueChange={(v) => setFormData({ ...formData, periodo_mes: parseInt(v) })}
+              >
+                <SelectTrigger className="border-none bg-slate-50 focus-visible:ring-emerald-500">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (
+                    <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Año del Período
+              </Label>
+              <Select
+                value={formData.periodo_anio.toString()}
+                onValueChange={(v) => setFormData({ ...formData, periodo_anio: parseInt(v) })}
+              >
+                <SelectTrigger className="border-none bg-slate-50 focus-visible:ring-emerald-500">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                    <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
