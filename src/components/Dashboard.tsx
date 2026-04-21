@@ -355,13 +355,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const hasOverdueEssentials = essentialOverdueExpenses.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+        <div className="text-center md:text-left">
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter">
             ¡Hola, Familia!
           </h2>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
+          <p className="text-[10px] md:text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
             Resumen de actividad • {currentMonthName} {new Date().getFullYear()}
           </p>
         </div>
@@ -385,7 +385,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="rounded-3xl border-2 border-dashed border-rose-300 bg-rose-50/50 p-6 shadow-sm backdrop-blur-sm"
+          className="rounded-2xl md:rounded-3xl border-2 border-dashed border-rose-300 bg-rose-50/50 p-4 md:p-6 shadow-sm backdrop-blur-sm"
         >
           <div className="flex items-start gap-4">
             <div className="rounded-2xl bg-rose-100 p-3 shadow-inner">
@@ -437,7 +437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-5">
         <KPICard
           title="Pagado"
           value={`$${totalPagado.toLocaleString()}`}
@@ -499,7 +499,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm"
         >
           {/* Background pattern */}
           <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-slate-50 opacity-50" />
@@ -603,23 +603,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="px-8 pt-8 pb-4">
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="p-4 md:px-8 md:pt-8 md:pb-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-200">
-                  <Activity className="h-5 w-5" />
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl md:rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-200">
+                  <Activity className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
-                <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Pendientes</CardTitle>
+                <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">Pendientes</CardTitle>
               </div>
               {pagosPendientes.length > 0 && (
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
-                  {pagosPendientes.length} items
+                <span className="rounded-full bg-amber-50 px-2 md:px-3 py-1 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
+                  {pagosPendientes.length}
                 </span>
               )}
             </div>
           </CardHeader>
-          <CardContent className="px-6 pb-8 pt-0">
+          <CardContent className="px-3 md:px-6 pb-4 md:pb-8 pt-0">
             <div className="space-y-2">
               {pagosPendientes.length > 0 ? (
                 pagosPendientes.slice(0, 5).map((e) => {
@@ -669,23 +669,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="px-8 pt-8 pb-4">
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="p-4 md:px-8 md:pt-8 md:pb-4">
              <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
-                  <CheckCircle2 className="h-5 w-5" />
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl md:rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+                  <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" />
                 </div>
-                <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Realizados</CardTitle>
+                <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">Realizados</CardTitle>
               </div>
               {pagosRealizados.length > 0 && (
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-600 border border-emerald-100">
-                  Mes {currentMonthName}
+                <span className="rounded-full bg-emerald-50 px-2 md:px-3 py-1 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 border border-emerald-100">
+                  {currentMonthName}
                 </span>
               )}
             </div>
           </CardHeader>
-          <CardContent className="px-6 pb-8 pt-0">
+          <CardContent className="px-3 md:px-6 pb-4 md:pb-8 pt-0">
             <div className="space-y-2">
               {pagosRealizados.length > 0 ? (
                 pagosRealizados.slice(0, 5).map((e) => (
@@ -731,14 +731,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="px-8 pt-8">
-            <CardTitle className="text-xl font-black text-slate-900 tracking-tight">
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="p-4 md:px-8 md:pt-8">
+            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">
               Flujo Mensual
             </CardTitle>
-            <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Gastos diarios acumulados</CardDescription>
+            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gastos diarios acumulados</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px] px-4 pb-8">
+          <CardContent className="h-[200px] md:h-[300px] px-2 md:px-4 pb-4 md:pb-8">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="8 8" vertical={false} stroke="#f1f5f9" />
@@ -778,14 +778,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="px-8 pt-8">
-            <CardTitle className="text-xl font-black text-slate-900 tracking-tight">
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="p-4 md:px-8 md:pt-8">
+            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">
               Categorías
             </CardTitle>
-            <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Distribución porcentual</CardDescription>
+            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Distribución porcentual</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px] px-4 pb-8">
+          <CardContent className="h-[200px] md:h-[300px] px-2 md:px-4 pb-4 md:pb-8">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -864,12 +864,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 pb-12">
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
-          <CardHeader className="px-8 pt-8">
-            <CardTitle className="text-xl font-black text-slate-900 tracking-tight underline decoration-indigo-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Ranking de Gastos</CardTitle>
-            <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Los 5 más caros del mes</CardDescription>
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
+          <CardHeader className="p-4 md:px-8 md:pt-8">
+            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-indigo-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Ranking de Gastos</CardTitle>
+            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Los 5 más caros del mes</CardDescription>
           </CardHeader>
-          <CardContent className="px-6 pb-8 pt-4">
+          <CardContent className="px-3 md:px-6 pb-4 md:pb-8 pt-2 md:pt-4">
             <div className="space-y-3">
               {[...monthlyExpenses]
                 .sort((a, b) => b.monto - a.monto)
@@ -901,12 +901,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
-          <CardHeader className="px-8 pt-8">
-            <CardTitle className="text-xl font-black text-slate-900 tracking-tight underline decoration-amber-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Tendencia Histórica</CardTitle>
-            <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total de los últimos 6 meses</CardDescription>
+        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
+          <CardHeader className="p-4 md:px-8 md:pt-8">
+            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-amber-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Tendencia Histórica</CardTitle>
+            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total de los últimos 6 meses</CardDescription>
           </CardHeader>
-          <CardContent className="h-[280px] px-4 pb-8 pt-4">
+          <CardContent className="h-[200px] md:h-[280px] px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={historyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -938,12 +938,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
-          <CardHeader className="px-8 pt-8">
-            <CardTitle className="text-xl font-black text-slate-900 tracking-tight underline decoration-emerald-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Miembros</CardTitle>
-            <CardDescription className="text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total acumulado por responsable</CardDescription>
+        <Card className="hidden md:block rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
+          <CardHeader className="p-4 md:px-8 md:pt-8">
+            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-emerald-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Miembros</CardTitle>
+            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total acumulado por responsable</CardDescription>
           </CardHeader>
-          <CardContent className="h-[280px] px-4 pb-8 pt-4">
+          <CardContent className="h-[200px] md:h-[280px] px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={responsibleData} layout="vertical" margin={{ left: 20, right: 40, top: 10, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="6 6" horizontal={false} stroke="#f1f5f9" />
@@ -1026,31 +1026,31 @@ const KPICard: React.FC<KPICardProps> = ({
       whileHover={{ scale: 1.02, y: -4 }}
       transition={{ type: "spring", stiffness: 300 }}
     >
-      <Card className={`relative h-full overflow-hidden border-none bg-white p-5 shadow-xl transition-all duration-300 ${compact ? 'rounded-[1.5rem]' : 'rounded-[2rem]'}`}>
-        <div className={`absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-[0.03] ${iconBgStyles[color]}`} />
+      <Card className={`relative h-full overflow-hidden border-none bg-white p-3 md:p-5 shadow-xl transition-all duration-300 ${compact ? 'rounded-xl md:rounded-[1.5rem]' : 'rounded-2xl md:rounded-[2rem]'}`}>
+        <div className={`absolute -right-6 -top-6 h-12 w-12 md:h-20 md:w-20 rounded-full opacity-[0.03] ${iconBgStyles[color]}`} />
         
         <div className="relative z-10 flex flex-col h-full bg-white">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{title}</h3>
-            <div className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg transition-transform hover:rotate-12 ${color === 'slate' ? 'bg-slate-800' : iconBgStyles[color]} text-white`}>
-              {icon}
+          <div className="mb-2 md:mb-4 flex items-center justify-between">
+            <h3 className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.1em] md:tracking-[0.2em] text-slate-400">{title}</h3>
+            <div className={`flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl md:rounded-2xl shadow-lg transition-transform hover:rotate-12 ${color === 'slate' ? 'bg-slate-800' : iconBgStyles[color]} text-white`}>
+              {React.cloneElement(icon as React.ReactElement, { className: 'h-4 w-4 md:h-5 md:w-5' })}
             </div>
           </div>
           
           <div className="flex-1">
-            <div className={`flex items-baseline gap-1 ${compact ? 'text-xl' : 'text-3xl'} font-black tracking-tighter text-slate-900`}>
+            <div className={`flex items-baseline gap-1 ${compact ? 'text-sm md:text-xl' : 'text-lg md:text-3xl'} font-black tracking-tighter text-slate-900`}>
               {value}
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-1.5">
+          <div className="mt-1 md:mt-2 flex items-center gap-1 md:gap-1.5">
             {trendUp !== undefined && (
-              <div className={`flex items-center gap-0.5 rounded-lg px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                {trendUp ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-                {trendUp ? '+2.4%' : '-1.2%'}
+              <div className={`flex items-center gap-0.5 rounded-md md:rounded-lg px-1 md:px-1.5 py-0.5 text-[8px] md:text-[9px] font-black uppercase tracking-tight ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                {trendUp ? <TrendingUp className="h-2 w-2 md:h-2.5 md:w-2.5" /> : <TrendingDown className="h-2 w-2 md:h-2.5 md:w-2.5" />}
+                {trendUp ? '+2%' : '-1%'}
               </div>
             )}
-            <p className="text-[10px] font-bold italic text-slate-400 truncate">
+            <p className="text-[8px] md:text-[10px] font-bold italic text-slate-400 truncate">
                {description}
             </p>
           </div>
