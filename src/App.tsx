@@ -281,16 +281,6 @@ export default function App() {
     setExpenseToEdit(null);
   };
 
-  const handleDeleteExpense = async (id: string) => {
-    try {
-      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEDELETEEXPENSE:", id);
-      setExpenses((prev) => prev.filter((e) => e.id !== id));
-      await gastosService.eliminarGasto(id);
-    } catch (error) {
-      console.error('Error al eliminar gasto:', error);
-    }
-  };
-
   const handleEditExpense = (expense: Expense) => {
     setExpenseToEdit(expense);
     setIsFormOpen(true);
@@ -394,65 +384,6 @@ export default function App() {
     }
   };
 
-  const handleDeletePayment = async (pagoId: string, gastoId: string) => {
-    if (!pagoId) return;
-
-    if (!confirm('¿Seguro que querés eliminar solo este pago?\n\nNo se eliminará el gasto original.\nEl sistema recalculará automáticamente el saldo pendiente y el estado del movimiento.')) {
-      return;
-    }
-
-    try {
-      console.log("ELIMINAR_PAGO_ID:", pagoId);
-      console.log("GASTO_ASOCIADO_ID:", gastoId);
-
-      // 1. Eliminar el pago de la DB
-      await gastosPagosHistorialService.eliminarPagoHistorial(pagoId);
-
-      // 2. Obtener el historial actualizado de este gasto para recalcular
-      const remainingPayments = await gastosPagosHistorialService.obtenerHistorialPorGasto(gastoId);
-      const totalAbonadoNuevo = remainingPayments.reduce((sum, p) => sum + p.monto_pagado, 0);
-      
-      const ultimaFechaPago = remainingPayments.length > 0 
-        ? remainingPayments[0].fecha_pago // Ya vienen ordenados desc en el servicio
-        : null;
-
-      // 3. Determinar el nuevo estado del gasto
-      const originalExpense = expenses.find(e => e.id === gastoId);
-      if (originalExpense) {
-        const expenseWithNewPaid: ExpenseWithCredit = {
-          ...originalExpense,
-          total_abonado: totalAbonadoNuevo,
-          fecha_pago: ultimaFechaPago
-        };
-        const nuevoEstado = getEstadoPagoReal(expenseWithNewPaid, totalAbonadoNuevo);
-        
-        console.log("TOTAL_ABONADO_RECALCULADO:", totalAbonadoNuevo);
-        console.log("ESTADO_RECALCULADO:", nuevoEstado);
-
-        const updateData = {
-          total_abonado: totalAbonadoNuevo,
-          estado_pago: nuevoEstado,
-          fecha_pago: ultimaFechaPago
-        };
-
-        // 4. Actualizar el gasto en Supabase
-        await gastosService.actualizarGasto(gastoId, updateData);
-
-        // 5. Refrescar estado local de gastos
-        setExpenses(prev => prev.map(e => e.id === gastoId ? { ...e, ...updateData } : e));
-      }
-
-      // 6. Refrescar historial global de pagos
-      const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
-      setGlobalHistory(updatedHistory);
-
-      alert("Pago eliminado correctamente");
-    } catch (error) {
-      console.error('Error al eliminar pago:', error);
-      alert("No se pudo eliminar el pago");
-    }
-  };
-
   const handleUpdateLimit = async (categoryName: string, limit: number) => {
     const updatedCategories = categories.map((c) =>
       c.categoria === categoryName ? { ...c, limite_mensual: limit } : c
@@ -500,8 +431,6 @@ export default function App() {
             expenses={expenses}
             onActionPayment={handleActionPayment}
             onEdit={handleEditExpense}
-            onDelete={handleDeleteExpense}
-            onDeletePayment={handleDeletePayment}
             onShowHistory={handleShowHistory}
             onTogglePayment={handleTogglePayment}
             onToggleArchive={handleToggleArchive}

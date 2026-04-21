@@ -30,6 +30,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     concepto: '',
     estado_pago: 'Pendiente',
     fecha_pago: null,
+    dia_vencimiento: 10,
   });
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         concepto: expenseToEdit.concepto || '',
         estado_pago: expenseToEdit.estado_pago || 'Pendiente',
         fecha_pago: expenseToEdit.fecha_pago || null,
+        dia_vencimiento: expenseToEdit.dia_vencimiento || 10,
       });
     } else {
       setFormData({
@@ -56,6 +58,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         concepto: '',
         estado_pago: 'Pendiente',
         fecha_pago: null,
+        dia_vencimiento: 10,
       });
     }
   }, [expenseToEdit, isOpen]);
@@ -193,6 +196,19 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                   <SelectItem value="Variable">Variable</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dia_vencimiento" className="text-xs font-bold text-slate-500 uppercase">Día Vencimiento (1-31)</Label>
+              <Input 
+                id="dia_vencimiento" 
+                type="number" 
+                min="1"
+                max="31"
+                value={formData.dia_vencimiento || ''}
+                onChange={(e) => setFormData({ ...formData, dia_vencimiento: parseInt(e.target.value) })}
+                className="bg-slate-50 border-none font-bold"
+                placeholder="10"
+              />
             </div>
           </div>
 

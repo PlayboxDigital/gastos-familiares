@@ -25,8 +25,6 @@ import {
   AlertTriangle,
   Clock,
   Edit2,
-  Trash2,
-  XCircle,
   History as HistoryIcon,
   RotateCcw,
   Archive,
@@ -96,8 +94,6 @@ interface PaymentHistoryProps {
   expenses: Expense[];
   onActionPayment: (expense: Expense) => void;
   onEdit: (expense: Expense) => void;
-  onDelete: (id: string) => void;
-  onDeletePayment: (pagoId: string, gastoId: string) => void;
   onShowHistory: (expense: Expense) => void;
   onTogglePayment: (id: string, currentStatus: any) => void;
   onToggleArchive?: (id: string, archived: boolean) => void;
@@ -132,8 +128,6 @@ export function PaymentHistory({
   expenses, 
   onActionPayment,
   onEdit,
-  onDelete,
-  onDeletePayment,
   onShowHistory,
   onTogglePayment,
   onToggleArchive
@@ -213,6 +207,7 @@ export function PaymentHistory({
             fecha_pago: format(current, 'yyyy-MM-dd'),
             servicio_clave: e.subcategoria,
             categoria_snapshot: e.categoria,
+            subcategoria_snapshot: e.subcategoria,
             responsable_snapshot: e.responsable,
             monto_pagado: e.monto,
             forma_pago: 'Faltante',
@@ -695,7 +690,7 @@ export function PaymentHistory({
                                 <TableCell className="py-5">
                                   <div className="flex flex-col gap-1">
                                     <span className="font-bold text-slate-900 text-sm">
-                                      {h.servicio_clave}
+                                      {h.subcategoria_snapshot || h.servicio_clave || 'Sin detalle'}
                                     </span>
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <Badge
@@ -780,32 +775,6 @@ export function PaymentHistory({
                                           >
                                             <Edit2 className="w-3.5 h-3.5" />
                                           </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 flex items-center gap-1.5 border border-slate-100"
-                                            onClick={() => {
-                                              if (confirm('¿Estás seguro de que deseas eliminar este movimiento completo?\nSe borrará el gasto original y todo su historial de pagos asociado.')) {
-                                                onDelete(h.originalExpense!.id);
-                                              }
-                                            }}
-                                            title="Eliminar movimiento completo (Gasto + Historial)"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                            <span className="text-[9px] font-black uppercase">Gasto</span>
-                                          </Button>
-                                          {h.sourceType === 'payment' && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 px-2 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 flex items-center gap-1.5 border border-rose-200"
-                                              onClick={() => h.gasto_id && onDeletePayment(h.id, h.gasto_id)}
-                                              title={`Eliminar solo este pago de $${h.monto_pagado.toLocaleString()} del ${formatSafeDate(h.fecha_pago, 'dd/MM')}`}
-                                            >
-                                              <XCircle className="w-3.5 h-3.5" />
-                                              <span className="text-[9px] font-black uppercase">Pago</span>
-                                            </Button>
-                                          )}
                                           {h.status === 'pagado' && h.sourceType === 'expense' && (
                                             <div 
                                               className="h-7 w-7 flex items-center justify-center text-slate-300"

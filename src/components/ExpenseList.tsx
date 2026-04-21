@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
-  Search, Filter, Trash2, Edit2,
+  Search, Filter, Edit2,
   CheckCircle2, Clock, Activity, History as HistoryIcon
 } from 'lucide-react';
 import { Expense, Priority, PaymentStatus } from '../types';
@@ -21,7 +21,6 @@ import { getEstadoVencimiento, getColorVencimiento } from '../estadoVencimiento'
 
 interface ExpenseListProps {
   expenses: Expense[];
-  onDelete: (id: string) => void;
   onEdit: (expense: Expense) => void;
   onTogglePayment: (id: string, currentStatus: PaymentStatus) => void;
   onShowHistory: (expense: Expense) => void;
@@ -55,7 +54,6 @@ const getEstadoPagoReal = (expense: ExpenseWithCredit): PaymentStatus => {
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
   expenses = [],
-  onDelete,
   onEdit,
   onTogglePayment,
   onShowHistory,
@@ -150,14 +148,15 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
   const getVencimientoLabel = (expense: Expense) => {
     const estado = getEstadoVencimiento(expense);
+    const dia = expense.dia_vencimiento ?? 10;
 
     switch (estado) {
       case 'vencido':
-        return 'Vencido';
+        return `Vencido (Día ${dia})`;
       case 'por_vencer':
-        return 'Por vencer';
+        return `Por vencer (Día ${dia})`;
       case 'en_plazo':
-        return 'En plazo';
+        return `Vence día ${dia}`;
       case 'pagado':
         return 'Pagado';
       default:
@@ -473,15 +472,6 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                           onClick={() => onEdit(e)}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all rounded-lg"
-                          onClick={() => onDelete(e.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
                     </TableCell>
