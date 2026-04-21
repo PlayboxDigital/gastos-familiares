@@ -1,9 +1,14 @@
-PARA COMPLETAR LA INSTALACIÃ“N PWA:
+PARA COMPLETAR LA INSTALACIÃ“N PWA PROFESIONAL:
 
-Es necesario agregar los siguientes archivos de Ã­cono en la carpeta /public:
+Es necesario reemplazar estos placeholders por los logos reales de "Gastos Familiares":
 
-1. pwa-192x192.png (Dimensiones: 192x192 pÃ­xeles)
-2. pwa-512x512.png (Dimensiones: 512x512 pÃ­xeles)
-3. pwa-512x512-maskable.png (Dimensiones: 512x512 pÃ­xeles, con margen de seguridad para recortes)
+1. pwa-192x192.png (192x192px): Logo centrado (GF) con fondo azul #2563eb.
+2. pwa-512x512.png (512x512px): Logo alta resoluciÃ³n.
+3. pwa-512x512-maskable.png (512x512px): Logo con margen (safe area) para evitar que se corte en Android.
+4. apple-touch-icon.png (180x180px): Para dispositivos iOS.
+5. favicon.ico: Para la pestaÃ±a del navegador.
 
-Estos archivos son requeridos por el manifest definido en vite.config.ts para que la app sea instalable de forma correcta en dispositivos móviles.
+RecomendaciÃ³n de diseÃ±o: 
+- Fondo: SÃ³lido #2563eb (Azul institucional de la app).
+- Texto: "GF" en blanco, fuente Sans-Serif, centrado.
+- Estilo: Minimalista y profesional.
