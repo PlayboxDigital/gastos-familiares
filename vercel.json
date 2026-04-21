@@ -32,14 +32,13 @@
       ]
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(manifest.webmanifest|sw.js|registerSW.js|pwa-192x192.png|pwa-512x512.png|pwa-512x512-maskable.png|favicon.ico|apple-touch-icon.png)",
-      "destination": "/$1"
+      "handle": "filesystem"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/.*",
+      "dest": "/index.html"
     }
   ]
 }
