@@ -24,11 +24,11 @@ export default defineConfig(({mode}) => {
           display: 'standalone',
           start_url: '/',
           scope: '/',
-          icons: [
-            { src: '/icons/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icons/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-            { src: '/icons/pwa-512x512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
-          ]
+icons: [
+  { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+  { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+  { src: '/pwa-512x512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}']
