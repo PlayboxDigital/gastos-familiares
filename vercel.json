@@ -1,9 +1,13 @@
 {
-  "builds": [
+  "headers": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build"
+      "source": "/icons/(.*).png",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "image/png"
+        }
+      ]
     }
-  ],
-  "outputDirectory": "dist"
+  ]
 }
