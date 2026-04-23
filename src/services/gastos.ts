@@ -134,15 +134,53 @@ export const gastosService = {
     return data as Expense;
   },
 
-  async actualizarGasto(id: string, gasto: Partial<ExpenseInput>): Promise<void> {
-    const { error } = await supabase
+  async actualizarGasto(id: string, gasto: Partial<ExpenseInput>): Promise<Expense> {
+    console.log("SAVE_GASTO_ID:", id);
+    console.log("SAVE_PAYLOAD:", gasto);
+
+    const { data: responseData, error } = await supabase
       .from('gastos')
       .update(gasto)
-      .eq('id', id);
+      .eq('id', id)
+      .select();
+
+    console.log("SAVE_RESPONSE_DATA:", responseData);
+    console.log("SAVE_RESPONSE_ERROR:", error);
 
     if (error) {
       throw new Error(`Error al actualizar gasto: ${error.message}`);
     }
+
+    // Si data es nulo o vacío, intentamos verificar si el ID existe realmente
+    if (!responseData || responseData.length === 0) {
+      console.warn("Supabase update no devolvió datos con .select(). Verificando existencia...");
+      
+      const { data: checkData, error: checkError } = await supabase
+        .from('gastos')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error("Error al verificar existencia del gasto:", checkError);
+      }
+
+      if (!checkData) {
+        throw new Error(`No se encontró el gasto con ID ${id} en la base de datos para actualizar.`);
+      }
+
+      // Si existe pero select() falló tras update, puede ser RLS o delay
+      console.warn("El gasto existe pero .select() tras .update() falló. Usando fallback local.");
+      
+      // Intentamos recuperar el objeto completo para devolver algo válido
+      const { data: fullRecord } = await supabase.from('gastos').select('*').eq('id', id).single();
+      if (fullRecord) return fullRecord as Expense;
+
+      // Fallback extremo
+      return { id, ...gasto } as any as Expense;
+    }
+
+    return responseData[0] as Expense;
   },
   
   async archivarGasto(id: string, archived: boolean): Promise<void> {

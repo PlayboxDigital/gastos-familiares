@@ -148,15 +148,15 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
   const getVencimientoLabel = (expense: Expense) => {
     const estado = getEstadoVencimiento(expense);
-    const dia = expense.dia_vencimiento ?? 10;
+    const dia = expense.dia_vencimiento;
 
     switch (estado) {
       case 'vencido':
-        return `Vencido (Día ${dia})`;
+        return `Vencido ${dia ? `(Día ${dia})` : ''}`;
       case 'por_vencer':
-        return `Por vencer (Día ${dia})`;
+        return `Por vencer ${dia ? `(Día ${dia})` : ''}`;
       case 'en_plazo':
-        return `Vence día ${dia}`;
+        return dia ? `Vence día ${dia}` : 'Pendiente';
       case 'pagado':
         return 'Pagado';
       default:

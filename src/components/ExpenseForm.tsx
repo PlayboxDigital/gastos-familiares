@@ -30,7 +30,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     concepto: '',
     estado_pago: 'Pendiente',
     fecha_pago: null,
-    dia_vencimiento: 10,
+    dia_vencimiento: new Date().getDate(),
   });
 
   useEffect(() => {
@@ -45,7 +45,10 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         concepto: expenseToEdit.concepto || '',
         estado_pago: expenseToEdit.estado_pago || 'Pendiente',
         fecha_pago: expenseToEdit.fecha_pago || null,
-        dia_vencimiento: expenseToEdit.dia_vencimiento || 10,
+        dia_vencimiento: expenseToEdit.dia_vencimiento || (expenseToEdit.fecha ? new Date(expenseToEdit.fecha + 'T12:00:00').getDate() : new Date().getDate()),
+        tipo: expenseToEdit.tipo || 'Fijo',
+        // Preservar campos que no están en el formulario pero son parte del modelo
+        ...((expenseToEdit as any).id_pago_original ? { id_pago_original: (expenseToEdit as any).id_pago_original } : {}),
       });
     } else {
       setFormData({
@@ -58,7 +61,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         concepto: '',
         estado_pago: 'Pendiente',
         fecha_pago: null,
-        dia_vencimiento: 10,
+        dia_vencimiento: new Date().getDate(),
+        tipo: 'Fijo',
       });
     }
   }, [expenseToEdit, isOpen]);
@@ -70,6 +74,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
       ...formData,
       fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null)
     };
+    
+    console.log("ITEM_ENVIADO_DIA_VENCIMIENTO:", normalizedData.dia_vencimiento);
+    
     onSubmit({ ...normalizedData, id: expenseToEdit?.id });
     onClose();
   };
@@ -205,9 +212,26 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                 min="1"
                 max="31"
                 value={formData.dia_vencimiento || ''}
-                onChange={(e) => setFormData({ ...formData, dia_vencimiento: parseInt(e.target.value) })}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setFormData({ ...formData, dia_vencimiento: isNaN(val) ? 0 : val });
+                }}
                 className="bg-slate-50 border-none font-bold"
-                placeholder="10"
+                placeholder={new Date().getDate().toString()}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fecha_vencimiento_picker" className="text-xs font-bold text-slate-500 uppercase">Calcular día desde fecha</Label>
+              <Input 
+                id="fecha_vencimiento_picker" 
+                type="date" 
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const date = new Date(e.target.value + 'T12:00:00');
+                    setFormData({ ...formData, dia_vencimiento: date.getDate() });
+                  }
+                }}
+                className="bg-slate-50 border-none font-bold"
               />
             </div>
           </div>

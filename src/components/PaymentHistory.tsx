@@ -12,6 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
   Search,
   Calendar,
   FileText,
@@ -28,7 +33,8 @@ import {
   History as HistoryIcon,
   RotateCcw,
   Archive,
-  ArchiveRestore
+  ArchiveRestore,
+  Trash2
 } from 'lucide-react';
 import { format, isWithinInterval, parseISO, addMonths, startOfMonth, differenceInMonths, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -97,12 +103,14 @@ interface PaymentHistoryProps {
   onShowHistory: (expense: Expense) => void;
   onTogglePayment: (id: string, currentStatus: any) => void;
   onToggleArchive?: (id: string, archived: boolean) => void;
+  onDeletePayment?: (pagoId: string) => void;
+  onDeleteExpense?: (expenseId: string) => void;
 }
 
 interface UnifiedItem extends Partial<GastoPagoHistorial> {
   id: string;
   sourceType: 'payment' | 'expense';
-  status: 'pagado' | 'pendiente' | 'vencido';
+  status: 'pagado' | 'pendiente' | 'vencido' | 'por_vencer';
   fecha_pago: string; // Used for unified sorting and filtering
   servicio_clave: string;
   categoria_snapshot: string;
@@ -130,7 +138,9 @@ export function PaymentHistory({
   onEdit,
   onShowHistory,
   onTogglePayment,
-  onToggleArchive
+  onToggleArchive,
+  onDeletePayment,
+  onDeleteExpense
 }: PaymentHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -138,7 +148,7 @@ export function PaymentHistory({
   const [selectedMethod, setSelectedMethod] = useState('Todos');
   const [selectedResponsible, setSelectedResponsible] = useState('Todos');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
-  const [activeStatusFilter, setActiveStatusFilter] = useState<'Todos' | 'pagado' | 'pendiente' | 'vencido'>('Todos');
+  const [activeStatusFilter, setActiveStatusFilter] = useState<'Todos' | 'pagado' | 'no_pagado'>('Todos');
   const [visibilityFilter, setVisibilityFilter] = useState<'Activos' | 'Archivados'>('Activos');
   const [sortConfig, setSortConfig] = useState<{
     key: 'fecha_pago' | 'monto_pagado';
@@ -170,78 +180,99 @@ export function PaymentHistory({
       };
     });
 
-    // 2. Generación de registros Faltantes / Pendientes basados en Fecha de Inicio
-    const gapItems: UnifiedItem[] = [];
-    const todayStart = startOfMonth(new Date());
+          const gapItems: UnifiedItem[] = [];
+          const todayStart = startOfMonth(new Date());
+          let vencidosCount = 0;
 
-    expenses.forEach(e => {
-      // Calculamos el inicio del devengamiento
-      const startDate = safeParseDate(e.fecha);
-      if (!startDate || !isValid(startDate)) return;
+          expenses.forEach(e => {
+            const startDate = safeParseDate(e.fecha);
+            if (!startDate || !isValid(startDate)) return;
 
-      const firstMonth = startOfMonth(startDate);
-      const lastMonth = todayStart;
+            const firstMonth = startOfMonth(startDate);
+            const lastMonth = todayStart;
 
-      // Iteramos mes a mes desde el inicio hasta hoy
-      let current = firstMonth;
-      while (current <= lastMonth) {
-        const year = current.getFullYear();
-        const month = current.getMonth() + 1;
+            let current = firstMonth;
+            while (current <= lastMonth) {
+              const year = current.getFullYear();
+              const month = current.getMonth() + 1;
 
-        // ¿Existe ya un pago para este servicio en este período?
-        // Buscamos en el historial real
-        const isPaid = history.some(h => 
-          h.gasto_id === e.id && 
-          h.periodo_anio === year && 
-          h.periodo_mes === month
-        );
+              const isPaid = history.some(h => 
+                h.gasto_id === e.id && 
+                h.periodo_anio === year && 
+                h.periodo_mes === month
+              );
 
-        if (!isPaid) {
-          // Si no está pago, es un ítem pendiente o vencido
-          const isVencido = current < todayStart;
-          
-          gapItems.push({
-            id: `gap-${e.id}-${year}-${month}`,
-            sourceType: 'expense',
-            status: isVencido ? 'vencido' : 'pendiente',
-            fecha_pago: format(current, 'yyyy-MM-dd'),
-            servicio_clave: e.subcategoria,
-            categoria_snapshot: e.categoria,
-            subcategoria_snapshot: e.subcategoria,
-            responsable_snapshot: e.responsable,
-            monto_pagado: e.monto,
-            forma_pago: 'Faltante',
-            referencia_pago: `Período ${month}/${year}`,
-            originalExpense: e,
-            archived: e.archived || false
+              if (!isPaid) {
+                const todayLocal = new Date();
+                todayLocal.setHours(0, 0, 0, 0);
+                const diaActual = todayLocal.getDate();
+                const isSameMonth = current.getFullYear() === todayLocal.getFullYear() && current.getMonth() === todayLocal.getMonth();
+
+                let status: 'vencido' | 'por_vencer' | 'pendiente' = 'pendiente';
+                
+                if (current < todayStart) {
+                  status = 'vencido';
+                } else if (isSameMonth) {
+                  const diaVenc = e.dia_vencimiento;
+                  if (diaVenc === null || diaVenc === undefined) {
+                    status = 'por_vencer';
+                  } else if (diaActual >= diaVenc) {
+                    status = 'vencido';
+                  } else {
+                    status = 'por_vencer';
+                  }
+                }
+
+                if (status === 'vencido') vencidosCount++;
+
+                gapItems.push({
+                  id: `gap-${e.id}-${year}-${month}`,
+                  sourceType: 'expense',
+                  status,
+                  fecha_pago: format(current, 'yyyy-MM-dd'),
+                  servicio_clave: e.subcategoria,
+                  categoria_snapshot: e.categoria,
+                  subcategoria_snapshot: e.subcategoria,
+                  responsable_snapshot: e.responsable,
+                  monto_pagado: e.monto,
+                  forma_pago: 'Faltante',
+                  referencia_pago: `Período ${month}/${year}`,
+                  originalExpense: e,
+                  archived: e.archived || false
+                });
+              }
+              current = addMonths(current, 1);
+            }
           });
-        }
-        current = addMonths(current, 1);
-      }
-    });
 
-    const unified = [...historyItems, ...gapItems];
-    console.log("UNIFICACION_ITEMS_CON_GAPS:", unified.length);
-    return unified;
+          console.log(`[AUDITORIA_VENCIDOS] TOTAL_GAPS: ${gapItems.length} | VENCIDOS_DETECTADOS: ${vencidosCount}`);
+          const unified = [...historyItems, ...gapItems];
+          return unified;
   }, [history, expenses]);
 
   const responsibles = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.responsable_snapshot).filter(Boolean)))],
+    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.responsable_snapshot).filter(r => r && r !== 'Todos')))],
     [itemsUnificados]
   );
 
   const categories = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.categoria_snapshot).filter(Boolean)))],
+    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.categoria_snapshot).filter(c => c && c !== 'Todos')))],
     [itemsUnificados]
   );
 
   const methods = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.forma_pago).filter(Boolean)))],
+    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.forma_pago).filter(m => m && m !== 'Todos')))],
     [itemsUnificados]
   );
 
-  const filteredHistory = useMemo(() => {
-    const baseFiltered = itemsUnificados.filter(item => {
+  // 1. Filtrado Base (Global: Visibilidad + Secundarios: Búsqueda, Filtros, Fechas)
+  const basePool = useMemo(() => {
+    return itemsUnificados.filter(item => {
+      // Filtro de Visibilidad (Archivados vs Activos) - Prioridad global
+      const matchesVisibility = visibilityFilter === 'Activos' ? !item.archived : item.archived;
+      if (!matchesVisibility) return false;
+
+      // Filtros Secundarios
       const matchesSearch =
         (item.servicio_clave || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.gasto_concepto_snapshot || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -262,30 +293,47 @@ export function PaymentHistory({
         if (!itemDate) {
           matchesDate = false;
         } else {
-          const start = safeParseDate(dateFrom) || new Date(0);
-          const endObj = safeParseDate(dateTo) || new Date();
-          const end = new Date(endObj);
-          if (dateTo) end.setHours(23, 59, 59, 999);
-
-          matchesDate = isWithinInterval(itemDate, { start, end });
+          const start = dateFrom ? parseISO(dateFrom) : new Date(0);
+          const end = dateTo ? parseISO(dateTo) : new Date(2100, 0, 1);
+          if (dateTo) {
+            end.setHours(23, 59, 59, 999);
+          }
+          matchesDate = itemDate >= start && itemDate <= end;
         }
       }
 
       return matchesSearch && matchesResponsible && matchesCategory && matchesMethod && matchesDate;
     });
+  }, [itemsUnificados, visibilityFilter, searchTerm, selectedResponsible, selectedCategory, selectedMethod, dateFrom, dateTo]);
 
-    const statusFiltered = baseFiltered.filter(item => {
+  // 2. Cálculo de Badges basado en el Pool Filtrado
+  const statusCounts = useMemo(() => {
+    return {
+      Todos: basePool.length,
+      pagado: basePool.filter(i => i.status === 'pagado').length,
+      no_pagado: basePool.filter(i => i.status !== 'pagado').length,
+    };
+  }, [basePool]);
+
+  // 3. Resultado Final Filtrado por Tab (Status) y Ordenado
+  const filteredHistory = useMemo(() => {
+    const statusFiltered = basePool.filter(item => {
       if (activeStatusFilter === 'Todos') return true;
-      return item.status === activeStatusFilter;
-    });
-
-    const visibilityFiltered = statusFiltered.filter(item => {
-      if (visibilityFilter === 'Activos') return !item.archived;
-      if (visibilityFilter === 'Archivados') return item.archived;
+      if (activeStatusFilter === 'pagado') return item.status === 'pagado';
+      if (activeStatusFilter === 'no_pagado') return item.status !== 'pagado';
       return true;
     });
 
-    const itemsFinales = visibilityFiltered;
+    const itemsFinales = statusFiltered;
+
+    console.log("BADGE_NO_PAGADOS_COUNT:", statusCounts.no_pagado);
+    console.log("LISTA_BASE_COUNT:", itemsUnificados.length);
+    console.log("LISTA_TRAS_FILTROS_SECUNDARIOS:", basePool.length);
+    console.log("LISTA_TRAS_FILTRO_TAB:", statusFiltered.length);
+    console.log("LISTA_TRAS_FILTRO_TEXTO:", searchTerm ? `Buscando: ${searchTerm}` : "N/A");
+    console.log("LISTA_TRAS_FILTRO_PAGO:", selectedMethod);
+    console.log("LISTA_TRAS_FILTRO_RESPONSABLE:", selectedResponsible);
+    console.log("LISTA_FINAL_RENDER:", itemsFinales.length);
 
     console.log("FILTRO_HISTORIAL_MOVIMIENTOS:", activeStatusFilter);
     console.log("FILTRO_VISIBILIDAD:", visibilityFilter);
@@ -304,30 +352,16 @@ export function PaymentHistory({
       return direction === 'asc' ? comparison : -comparison;
     });
   }, [
-    itemsUnificados,
-    searchTerm,
-    selectedResponsible,
-    selectedCategory,
-    selectedMethod,
-    dateFrom,
-    dateTo,
-    sortConfig,
+    basePool,
+    statusCounts,
     activeStatusFilter,
-    visibilityFilter
+    sortConfig,
+    visibilityFilter,
+    searchTerm,
+    selectedMethod,
+    selectedResponsible,
+    itemsUnificados.length
   ]);
-
-  const statusCounts = useMemo(() => {
-    const visiblePool = itemsUnificados.filter(i => 
-      visibilityFilter === 'Activos' ? !i.archived : i.archived
-    );
-    
-    return {
-      Todos: visiblePool.length,
-      pagado: visiblePool.filter(i => i.status === 'pagado').length,
-      pendiente: visiblePool.filter(i => i.status === 'pendiente').length,
-      vencido: visiblePool.filter(i => i.status === 'vencido').length,
-    };
-  }, [itemsUnificados, visibilityFilter]);
 
   const groupedHistory = useMemo<HistoryGroup[]>(() => {
     const groups = new Map<string, HistoryGroup>();
@@ -458,10 +492,10 @@ export function PaymentHistory({
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        {/* Filtros de Estado */}
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-2 pb-2">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        {/* Filtros de Nivel 1: Estado y Visibilidad */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap gap-2">
             <StatusFilterButton 
               label="Todos" 
               count={statusCounts.Todos} 
@@ -477,26 +511,19 @@ export function PaymentHistory({
               colorClass="emerald"
             />
             <StatusFilterButton 
-              label="Por vencer" 
-              count={statusCounts.pendiente} 
-              active={activeStatusFilter === 'pendiente'} 
-              onClick={() => setActiveStatusFilter('pendiente')}
+              label="No pagados" 
+              count={statusCounts.no_pagado} 
+              active={activeStatusFilter === 'no_pagado'} 
+              onClick={() => setActiveStatusFilter('no_pagado')}
               colorClass="amber"
-            />
-            <StatusFilterButton 
-              label="Vencidos" 
-              count={statusCounts.vencido} 
-              active={activeStatusFilter === 'vencido'} 
-              onClick={() => setActiveStatusFilter('vencido')}
-              colorClass="rose"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
               <button
                 onClick={() => setVisibilityFilter('Activos')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
                   visibilityFilter === 'Activos'
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
@@ -506,7 +533,7 @@ export function PaymentHistory({
               </button>
               <button
                 onClick={() => setVisibilityFilter('Archivados')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
                   visibilityFilter === 'Archivados'
                     ? 'bg-white text-rose-600 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
@@ -518,61 +545,102 @@ export function PaymentHistory({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100">
+        {/* Filtros de Nivel 2: Metadatos (Buscador, Fecha, Modo, Responsable, Tipo) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-5 border-t border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Buscar por concepto, ref..."
+              placeholder="Buscar concepto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-10 bg-slate-50/50 border-slate-200 focus:bg-white transition-all text-xs font-medium"
+              className="pl-9 h-10 bg-slate-50/50 border-slate-200 focus:bg-white transition-all text-[11px] font-bold"
             />
           </div>
 
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="pl-8 h-10 bg-slate-50/50 border-slate-200 text-[10px] font-bold"
-              />
-            </div>
-            <div className="relative flex-1">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="pl-8 h-10 bg-slate-50/50 border-slate-200 text-[10px] font-bold"
-              />
-            </div>
+          <div className="w-full">
+            <Popover>
+              <PopoverTrigger className="w-full">
+                <div 
+                  className={`w-full h-10 px-3 flex items-center justify-start text-left font-bold text-[10.5px] bg-slate-50/50 border border-slate-200 rounded-lg hover:bg-slate-100 cursor-pointer transition-all ${(!dateFrom && !dateTo) ? 'text-slate-400' : 'text-blue-600 border-blue-200 bg-blue-50/50'}`}
+                >
+                  <Calendar className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {(!dateFrom && !dateTo) ? 'Rango de fechas' : `${dateFrom ? format(parseISO(dateFrom), 'dd/MM/yy') : '..'} - ${dateTo ? format(parseISO(dateTo), 'dd/MM/yy') : '..'}`}
+                  </span>
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-4 rounded-2xl shadow-xl border-slate-200" align="start">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rango de fechas</h4>
+                    {(dateFrom || dateTo) && (
+                      <button 
+                        onClick={() => { setDateFrom(''); setDateTo(''); }}
+                        className="text-[9px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-600"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider ml-1">Desde</label>
+                      <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="h-9 text-xs bg-slate-50/50 border-slate-200"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider ml-1">Hasta</label>
+                      <Input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="h-9 text-xs bg-slate-50/50 border-slate-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          <div className="flex gap-2">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="flex-1 h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select
-              value={selectedMethod}
-              onChange={(e) => setSelectedMethod(e.target.value)}
-              className="flex-1 h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              {methods.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
+          <select
+            value={selectedMethod}
+            onChange={(e) => setSelectedMethod(e.target.value)}
+            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
+          >
+            {methods.map(m => (
+              <option key={m} value={m}>
+                {m === 'Todos' ? 'Pago: Todos' : m}
+              </option>
+            ))}
+          </select>
 
           <select
             value={selectedResponsible}
             onChange={(e) => setSelectedResponsible(e.target.value)}
-            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
           >
-            {responsibles.map(r => <option key={r} value={r}>{r}</option>)}
+            {responsibles.map(r => (
+              <option key={r} value={r}>
+                {r === 'Todos' ? 'Responsable: Todos' : r}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
+          >
+            {categories.map(c => (
+              <option key={c} value={c}>
+                {c === 'Todos' ? 'Tipo: Todos' : c}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -745,6 +813,22 @@ export function PaymentHistory({
                                           >
                                             <HistoryIcon className="w-3.5 h-3.5" />
                                           </Button>
+
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                            onClick={() => {
+                                              if (h.sourceType === 'payment' && onDeletePayment) {
+                                                onDeletePayment(h.id);
+                                              } else if (h.sourceType === 'expense' && onDeleteExpense) {
+                                                onDeleteExpense(h.originalExpense!.id);
+                                              }
+                                            }}
+                                            title="Eliminar este registro"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
                                           
                                           {onToggleArchive && (
                                             <Button
@@ -818,30 +902,17 @@ export function PaymentHistory({
                                           <FileText className="w-4 h-4" />
                                         </div>
                                       )
-                                    ) : h.status === 'pendiente' ? (
+                                    ) : (
                                       <div className="flex items-center justify-end gap-2">
                                         <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none text-[8px] font-black uppercase tracking-widest px-2">
-                                          Por vencer
+                                          No pagado
                                         </Badge>
                                         <Button
                                           size="sm"
                                           onClick={() => h.originalExpense && onActionPayment(h.originalExpense)}
                                           className="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-tight gap-1.5"
                                         >
-                                          <Clock className="w-3 h-3" /> Pagar
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-end gap-2">
-                                        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-none text-[8px] font-black uppercase tracking-widest px-2">
-                                          Vencido
-                                        </Badge>
-                                        <Button
-                                          size="sm"
-                                          onClick={() => h.originalExpense && onActionPayment(h.originalExpense)}
-                                          className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-tight gap-1.5"
-                                        >
-                                          <AlertTriangle className="w-3 h-3" /> Pagar
+                                          {h.status === 'vencido' ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />} Pagar
                                         </Button>
                                       </div>
                                     )}

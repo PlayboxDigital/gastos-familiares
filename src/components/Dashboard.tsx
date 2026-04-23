@@ -32,6 +32,7 @@ interface DashboardProps {
   history?: GastoPagoHistorial[];
   onQuickPayExpense?: (expense: Expense) => void;
   onTabChange?: (tab: string) => void;
+  onSelectIncome?: (clientName: string) => void;
 }
 
 type ExpenseWithCredit = Expense & {
@@ -91,6 +92,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   history = [],
   onQuickPayExpense,
   onTabChange,
+  onSelectIncome,
 }) => {
   const currentMonth = new Date();
 
@@ -122,7 +124,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const getStatus = (e: Expense) => getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
 
   const totalMonthly = useMemo(
-    () => monthlyExpenses.reduce((sum, e) => sum + e.monto, 0),
+    () => monthlyExpenses.reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0),
     [monthlyExpenses]
   );
 
@@ -245,7 +247,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           urgency = 'vencido';
         } else if (isSameDay(deadlineDate, today)) {
           urgency = 'hoy';
-        } else if (diff <= 7) {
+        } else if (diff <= 31) { // Aumentado de 7 a 31 para que no "desaparezcan" al editar vencimientos lejanos (Prompt 082)
           urgency = 'pronto';
         } else {
           return null; // Demasiado lejos
@@ -292,6 +294,55 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }, 0);
   }, [pendingEssentialExpenses]);
 
+  const clientesPorCobrar = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return incomes
+      .filter(i => i.estado_pago !== 'Pagado')
+      .map(i => {
+        let deadlineDate: Date;
+        try {
+          deadlineDate = parseISO(i.fecha_vencimiento || i.fecha || '');
+          if (isNaN(deadlineDate.getTime())) throw new Error();
+        } catch {
+          deadlineDate = today;
+        }
+        deadlineDate.setHours(0, 0, 0, 0);
+        
+        const diff = differenceInDays(deadlineDate, today);
+        let urgency: 'vencido' | 'hoy' | 'pronto' | 'lejano';
+
+        if (isBefore(deadlineDate, today)) {
+          urgency = 'vencido';
+        } else if (isSameDay(deadlineDate, today)) {
+          urgency = 'hoy';
+        } else if (diff <= 7) {
+          urgency = 'pronto';
+        } else {
+          urgency = 'lejano';
+        }
+
+        const saldo = (i.monto_total || i.monto || 0) - (i.monto_cobrado || 0);
+
+        return {
+          ...i,
+          deadlineDate,
+          urgency,
+          diff,
+          saldo
+        };
+      })
+      .sort((a, b) => {
+        const order = { vencido: 0, hoy: 1, pronto: 2, lejano: 3 };
+        if (order[a.urgency] !== order[b.urgency]) {
+          return order[a.urgency] - order[b.urgency];
+        }
+        return a.deadlineDate.getTime() - b.deadlineDate.getTime();
+      })
+      .slice(0, 6);
+  }, [incomes]);
+
   const currentMonthName = useMemo(() => {
     try {
       return format(currentMonth, 'MMMM', { locale: es });
@@ -317,9 +368,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return essentialOverdueExpenses[0] || pendingEssentialExpenses[0] || pagosPendientes[0];
   }, [essentialOverdueExpenses, pendingEssentialExpenses, pagosPendientes]);
 
-  const showEssentialAlert = essentialOverdueExpenses.length > 0;
-
-  const totalEssentialAlertAmount = useMemo(() => {
+  const riesgoFinanciero = useMemo(() => {
     return essentialOverdueExpenses.reduce((sum, e) => {
       const saldo = Math.max(
         0,
@@ -328,8 +377,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return sum + saldo;
     }, 0);
   }, [essentialOverdueExpenses]);
-
-  const riesgoFinanciero = totalEssentialAlertAmount;
 
   const hasPendingEssentials = pendingEssentialExpenses.length > 0;
   const hasOverdueEssentials = essentialOverdueExpenses.length > 0;
@@ -350,75 +397,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {showEssentialAlert && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="rounded-2xl md:rounded-3xl border-2 border-dashed border-rose-300 bg-rose-50/50 p-4 md:p-6 shadow-sm backdrop-blur-sm"
-        >
-          <div className="flex items-start gap-4">
-            <div className="rounded-2xl bg-rose-100 p-3 shadow-inner">
-              <AlertTriangle className="h-6 w-6 text-rose-600" />
-            </div>
-
-            <div className="flex-1">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-lg font-black text-rose-900 uppercase tracking-tight">
-                  ¡Atención! Gastos Críticos Vencidos
-                </h3>
-                <span className="rounded-full bg-rose-500 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
-                  Día {diaActual}
-                </span>
-              </div>
-
-              <p className="mt-2 text-sm font-medium text-rose-800">
-                Tenés <span className="font-black underline decoration-rose-400 decoration-2 underline-offset-2">{essentialOverdueExpenses.length}</span>{' '}
-                gastos de alta prioridad que necesitan tu atención, sumando{' '}
-                <span className="text-lg font-black italic">
-                  ${totalEssentialAlertAmount.toLocaleString()}
-                </span>
-                .
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {essentialOverdueExpenses.slice(0, 5).map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => onQuickPayExpense?.(e)}
-                    className="group relative rounded-2xl border-2 border-rose-200 bg-white px-4 py-2 text-xs font-bold text-rose-900 transition-all hover:border-rose-400 hover:shadow-md active:scale-95"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Zap className="h-3 w-3 text-rose-500" />
-                      {e.subcategoria || e.categoria}
-                    </span>
-                  </button>
-                ))}
-
-                {essentialOverdueExpenses.length > 5 && (
-                  <span className="flex items-center rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50 px-4 py-2 text-xs font-black text-rose-700">
-                    +{essentialOverdueExpenses.length - 5} más
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <KPICard
-          title="Ingresado"
+          title="Cobranzas"
           value={`$${totalIncomes.toLocaleString()}`}
           icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
-          description="Total ingresos del mes"
+          description="Ventas estimadas del mes"
           color="emerald"
         />
         <KPICard
           title="Gastos Totales"
           value={`$${totalMonthly.toLocaleString()}`}
           icon={<DollarSign className="h-5 w-5 text-indigo-500" />}
-          description="A pagar este mes"
+          description="Por pagar (Neto)"
           color="indigo"
         />
         <KPICard
@@ -429,10 +420,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           color={availableEstimado >= 0 ? "indigo" : "rose"}
         />
         <KPICard
-          title="Cierre de Mes"
+          title="Avance de Pagos"
           value={`${Math.round((totalPagado / (totalMonthly || 1)) * 100)}%`}
           icon={<FlagIcon className="h-5 w-5 text-slate-500" />}
-          description="Progreso de pago"
+          description="% del monto mensual abonado"
           color="slate"
         />
       </div>
@@ -581,7 +572,70 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
+          <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 md:gap-2.5">
+                <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Clientes por cobrar</CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
+            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+              {clientesPorCobrar.length > 0 ? (
+                clientesPorCobrar.map((i) => {
+                  const urgencyLabels = {
+                    vencido: { text: 'Vencido', color: 'text-rose-600 bg-rose-50 border-rose-100', icon: <Flame className="w-2.5 h-2.5" /> },
+                    hoy: { text: 'Hoy', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: <Zap className="w-2.5 h-2.5" /> },
+                    pronto: { text: `${i.diff}d`, color: 'text-blue-600 bg-blue-50 border-blue-100', icon: <Calendar className="w-2.5 h-2.5" /> },
+                    lejano: { text: 'Prox', color: 'text-slate-500 bg-slate-50 border-slate-100', icon: <Activity className="w-2.5 h-2.5" /> }
+                  };
+
+                  const config = urgencyLabels[i.urgency];
+
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      onClick={() => onSelectIncome?.(i.cliente)}
+                      className="group w-full flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-slate-50 text-left active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black text-[10px] ${config.color}`}>
+                          {i.cliente?.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{i.cliente}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`flex items-center gap-0.5 rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider border ${config.color}`}>
+                              {config.icon}
+                              {config.text}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right ml-2 shrink-0">
+                        <p className="text-[13px] font-black tabular-nums text-emerald-600">
+                          ${i.saldo.toLocaleString()}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <CheckCircle2 className="h-10 w-10 mb-2 opacity-20" />
+                  <p className="text-[11px] font-bold italic">Sin cobros pendientes</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
           <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
             <div className="flex items-center justify-between">

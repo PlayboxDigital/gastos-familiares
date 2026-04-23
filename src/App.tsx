@@ -24,15 +24,17 @@ import {
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
+import { supabase } from './lib/supabase';
 import { presupuestosService } from './services/presupuestos';
 import { gastosPagosHistorialService } from './services/gastosPagosHistorial';
 import { deudasService } from './services/deudas';
-import { incomesService } from './services/ingresos';
+import { incomesService } from './services/Clientes';
 import { Button } from '@/components/ui/button';
 import { DebtList } from './components/DebtList';
 import { DebtForm } from './components/DebtForm';
 import { IncomeList } from './components/IncomeList';
 import { IncomeForm } from './components/IncomeForm';
+import { AutoList } from './components/AutoList';
 import {
   Plus,
   LayoutDashboard,
@@ -47,8 +49,10 @@ import {
   CreditCard,
   TrendingUp,
   Activity,
+  Car,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { startOfMonth, parseISO } from 'date-fns';
 
 type ExpenseWithCredit = Expense & {
   saldo_a_favor_aplicado?: number;
@@ -92,6 +96,14 @@ export default function App() {
   const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
   const [incomeToEdit, setIncomeToEdit] = useState<Income | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
+
+  // Sincronizar búsqueda cuando se cambia de pestaña manual
+  useEffect(() => {
+    if (activeTab !== 'incomes') {
+      setIncomeSearchTerm('');
+    }
+  }, [activeTab]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingPaymentIds, setUpdatingPaymentIds] = useState<Set<string>>(new Set());
   const [hasLegacyData, setHasLegacyData] = useState(false);
@@ -277,16 +289,27 @@ export default function App() {
           console.error("APP_FETCH_INGRESOS_ERROR:", ingresosResult.reason);
         }
 
-        console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
-        console.log("APP_GASTOS_2_ROWS:", Array.isArray(dbExpenses) ? dbExpenses.length : null);
+    console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
+    if (dbExpenses.length > 0) {
+      console.log("APP_GASTOS_SCHEMA_KEYS:", Object.keys(dbExpenses[0]));
+    }
+    console.log("APP_GASTOS_2_ROWS:", Array.isArray(dbExpenses) ? dbExpenses.length : null);
 
         console.log("APP_GASTOS_3_ANTES_SETSTATE:", dbExpenses);
 
         console.log("APP_GASTOS_3A_SETSTATE_INICIO")
         setExpenses((prev) => {
-          console.log("APP_GASTOS_3B_PREV_STATE:", prev)
-          console.log("APP_GASTOS_3C_NEW_STATE:", dbExpenses)
-          return dbExpenses
+        console.log("APP_GASTOS_3B_PREV_STATE_COUNT:", prev.length);
+        console.log("APP_GASTOS_3C_NEW_STATE_COUNT:", dbExpenses.length);
+        
+        // Log de Relecura Detallado (Prompt 081)
+        dbExpenses.forEach(exp => {
+          if (exp.id) {
+            console.log(`RELOAD_GASTO_ID: ${exp.id}, RELOAD_DIA_VENCIMIENTO_LEIDO: ${exp.dia_vencimiento}`);
+          }
+        });
+
+        return dbExpenses;
         })
         console.log("APP_GASTOS_3D_SETSTATE_EJECUTADO")
 
@@ -305,23 +328,43 @@ export default function App() {
   }, []);
 
   const handleAddExpense = async (newExpense: Omit<Expense, 'id'> & { id?: string }) => {
+    console.log("APP_HANDLEADDEXPENSE_INIT:", newExpense.id || 'NEW');
     try {
       if (newExpense.id) {
-        const { id, ...data } = newExpense;
-        await gastosService.actualizarGasto(id, data);
-        console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEADDEXPENSE_UPDATE:", id);
-        setExpenses((prev) =>
-          prev.map((e) => (e.id === id ? ({ ...e, ...data } as Expense) : e))
-        );
+        const id = newExpense.id;
+
+        // Guard: Evitar IDs virtuales de la UI en la base de datos (Prompt 082)
+        if (id.startsWith('exp-')) {
+          console.error("APP_ERROR_ID_VIRTUAL_DETECTADO:", id);
+          throw new Error("Estás intentando editar una proyección. Debes editar el gasto original desde la lista de gastos o historial real.");
+        }
+
+        const { id: _, ...data } = newExpense;
+        
+        // Limpieza de campos inexistentes en DB para evitar errores de schema (Prompt 079)
+        const cleanData = { ...data };
+        if ('fecha_vencimiento' in cleanData) delete (cleanData as any).fecha_vencimiento;
+
+        // Actualizamos en Supabase y obtenemos el registro real actualizado
+        console.log("ITEM_EDITADO_DIA_VENCIMIENTO:", data.dia_vencimiento);
+        const updatedFromDB = await gastosService.actualizarGasto(id, cleanData);
+        console.log("ITEM_GUARDADO_DIA_VENCIMIENTO:", updatedFromDB.dia_vencimiento);
+
+        setExpenses((prev) => {
+          const updated = prev.map((e) => (e.id === id ? { ...e, ...updatedFromDB } : e));
+          console.log("APP_HANDLEADDEXPENSE_STATE_UPDATE_SUCCESS:", id);
+          return updated;
+        });
       } else {
         const createdExpense = await gastosService.crearGasto(newExpense);
-        console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEADDEXPENSE_CREATE:", createdExpense);
         setExpenses((prev) => [createdExpense, ...prev]);
       }
     } catch (error) {
       console.error('Error al procesar gasto:', error);
     }
 
+    // CRITICAL: Cerrar modal y limpiar estado para evitar reset visual erróneo (Prompt 082)
+    setIsFormOpen(false);
     setExpenseToEdit(null);
   };
 
@@ -495,6 +538,141 @@ export default function App() {
     }
   };
 
+  const handleDeleteExpense = async (id: string) => {
+    const expense = expenses.find(e => e.id === id);
+    if (!expense) return;
+
+    // Detectar duplicados potenciales (mismo concepto en el mismo mes)
+    const expenseDate = parseISO(expense.fecha);
+    const monthKey = `${expense.categoria}|${expense.subcategoria}|${startOfMonth(expenseDate).getTime()}`;
+    
+    const duplicate = expenses.find(e => {
+      if (e.id === id) return false;
+      const d = parseISO(e.fecha);
+      const k = `${e.categoria}|${e.subcategoria}|${startOfMonth(d).getTime()}`;
+      return k === monthKey;
+    });
+
+    const associatedPayments = globalHistory.filter(h => h.gasto_id === id);
+    
+    if (associatedPayments.length > 0) {
+      let choice = "";
+      if (duplicate) {
+        choice = window.prompt(
+          `Este gasto tiene ${associatedPayments.length} pagos registrados y parece ser un DUPLICADO de "${duplicate.subcategoria}" (${duplicate.fecha}).\n\n` +
+          `¿Qué deseas hacer?\n` +
+          `1. Eliminar TODO (gasto y sus pagos)\n` +
+          `2. FUSIONAR (traspasar sus pagos al otro gasto y borrar este)\n` +
+          `Escribe 1 o 2 para confirmar, o cancela.`
+        ) || "";
+      } else {
+        const confirmDeleteAll = window.confirm(
+          `Este gasto tiene ${associatedPayments.length} pagos asociados.\n` +
+          `No se puede eliminar un gasto con historial sin borrar también sus pagos.\n\n` +
+          `¿Deseas eliminar el gasto y TODO su historial de pagos?`
+        );
+        if (confirmDeleteAll) choice = "1";
+      }
+
+      if (choice === "1") {
+        try {
+          setIsLoading(true);
+          // Eliminar pagos asociados
+          for (const payment of associatedPayments) {
+            await gastosPagosHistorialService.eliminarPagoHistorial(payment.id);
+          }
+          await gastosService.eliminarGasto(id);
+          
+          setExpenses(prev => prev.filter(e => e.id !== id));
+          const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
+          setGlobalHistory(updatedHistory);
+          alert('Gasto e historial eliminados correctamente.');
+        } catch (error) {
+          console.error('Error al eliminar con dependencias:', error);
+          alert('Error al intentar eliminar registros asociados.');
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (choice === "2" && duplicate) {
+        try {
+          setIsLoading(true);
+          // Fusionar: traspasar pagos al duplicado
+          await gastosPagosHistorialService.actualizarGastoIdEnPagos(id, duplicate.id);
+          
+          // Recalcular el total_abonado del gasto destino
+          const totalTraspasado = associatedPayments.reduce((sum, p) => sum + p.monto_pagado, 0);
+          const newTotalAbonado = (duplicate.total_abonado || 0) + totalTraspasado;
+          
+          await gastosService.actualizarGasto(duplicate.id, {
+            total_abonado: newTotalAbonado,
+            estado_pago: getEstadoPagoReal(duplicate as ExpenseWithCredit, newTotalAbonado)
+          });
+          
+          // Eliminar el gasto ahora orfano
+          await gastosService.eliminarGasto(id);
+          
+          // Refrescar datos
+          const [newExpenses, newHistory] = await Promise.all([
+            gastosService.obtenerGastos(),
+            gastosPagosHistorialService.obtenerTodoElHistorial()
+          ]);
+          setExpenses(newExpenses);
+          setGlobalHistory(newHistory);
+          alert('Fusión exitosa. Los pagos han sido traspasados.');
+        } catch (error) {
+          console.error('Error durante la fusión:', error);
+          alert('La fusión falló. Revisa la consola para más detalles.');
+        } finally {
+          setIsLoading(false);
+        }
+      }
+      return;
+    }
+
+    // Caso estándar sin pagos
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este gasto permanentemente?')) return;
+    
+    try {
+      await gastosService.eliminarGasto(id);
+      setExpenses(prev => prev.filter(e => e.id !== id));
+    } catch (error) {
+      console.error('Error al eliminar gasto:', error);
+      alert('Este gasto no se puede eliminar. Posiblemente tenga pagos asociados que no se cargaron correctamente.');
+    }
+  };
+
+  const handleDeleteHistoryPayment = async (pagoId: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se verá afectado.')) return;
+
+    try {
+      const pago = globalHistory.find(h => h.id === pagoId);
+      if (!pago) return;
+
+      const gastoId = pago.gasto_id;
+      const originalExpense = expenses.find(e => e.id === gastoId);
+
+      await gastosPagosHistorialService.eliminarPagoHistorial(pagoId);
+
+      // Si el pago estaba asociado a un gasto, hay que restar el monto del total_abonado del gasto
+      if (originalExpense) {
+        const newTotalAbonado = Math.max(0, (originalExpense.total_abonado || 0) - pago.monto_pagado);
+        const updateData = {
+          total_abonado: newTotalAbonado,
+          estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, newTotalAbonado)
+        };
+        
+        await gastosService.actualizarGasto(gastoId, updateData as any);
+        setExpenses(prev => prev.map(e => e.id === gastoId ? { ...e, ...updateData } : e));
+      }
+
+      const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
+      setGlobalHistory(updatedHistory);
+    } catch (error) {
+      console.error('Error al eliminar pago del historial:', error);
+      alert('No se pudo eliminar el pago del historial.');
+    }
+  };
+
   const handleUpdateLimit = async (categoryName: string, limit: number) => {
     const updatedCategories = categories.map((c) =>
       c.categoria === categoryName ? { ...c, limite_mensual: limit } : c
@@ -533,7 +711,24 @@ export default function App() {
             categories={categories}
             incomes={incomes}
             debts={debts}
+            history={globalHistory}
             onQuickPayExpense={handleActionPayment}
+            onTabChange={setActiveTab}
+            onSelectIncome={(name) => {
+              setIncomeSearchTerm(name);
+              setActiveTab('incomes');
+            }}
+          />
+        );
+      case 'monthly-status':
+        return (
+          <ExpenseList
+            expenses={expenses}
+            onEdit={handleEditExpense}
+            onTogglePayment={handleTogglePayment}
+            onShowHistory={handleShowHistory}
+            onActionPayment={handleActionPayment}
+            updatingPaymentIds={updatingPaymentIds}
           />
         );
       case 'history':
@@ -546,6 +741,8 @@ export default function App() {
             onShowHistory={handleShowHistory}
             onTogglePayment={handleTogglePayment}
             onToggleArchive={handleToggleArchive}
+            onDeletePayment={handleDeleteHistoryPayment}
+            onDeleteExpense={handleDeleteExpense}
           />
         );
       case 'debts':
@@ -563,10 +760,14 @@ export default function App() {
             expenses={expenses}
             onEdit={handleEditIncome}
             onDelete={handleDeleteIncome}
+            searchTerm={incomeSearchTerm}
+            onSearchChange={setIncomeSearchTerm}
           />
         );
       case 'settings':
         return <Settings categories={categories} onUpdateLimit={handleUpdateLimit} />;
+      case 'autos':
+        return <AutoList />;
       default:
         console.log("APP_COMPONENTE_CON_EXPENSES: Dashboard (default)", expenses.length);
         return (
@@ -575,7 +776,13 @@ export default function App() {
             categories={categories}
             incomes={incomes}
             debts={debts}
+            history={globalHistory}
             onQuickPayExpense={handleActionPayment}
+            onTabChange={setActiveTab}
+            onSelectIncome={(name) => {
+              setIncomeSearchTerm(name);
+              setActiveTab('incomes');
+            }}
           />
         );
       }
@@ -606,10 +813,22 @@ export default function App() {
             label="Dashboard"
           />
           <SidebarLink
+            active={activeTab === 'monthly-status'}
+            onClick={() => setActiveTab('monthly-status')}
+            icon={<Activity className="w-5 h-5" />}
+            label="Estado Mensual"
+          />
+          <SidebarLink
             active={activeTab === 'incomes'}
             onClick={() => setActiveTab('incomes')}
             icon={<TrendingUp className="w-5 h-5" />}
-            label="Ingresos"
+            label="Clientes"
+          />
+          <SidebarLink
+            active={activeTab === 'autos'}
+            onClick={() => setActiveTab('autos')}
+            icon={<Car className="w-5 h-5" />}
+            label="Autos"
           />
           <SidebarLink
             active={activeTab === 'history'}
@@ -669,7 +888,9 @@ export default function App() {
                 : activeTab === 'debts'
                 ? 'Control de Deudas'
                 : activeTab === 'incomes'
-                ? 'Gestión de Ingresos'
+                ? 'Clientes y Cobranzas'
+                : activeTab === 'autos'
+                ? 'Control de Vehículos'
                 : 'Configuración'}
             </h2>
           </div>
@@ -704,7 +925,7 @@ export default function App() {
             >
               <Plus className="w-5 h-5 mr-2" />
               <span className="hidden sm:inline">
-                {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Ingreso' : 'Nuevo Gasto'}
+                {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Cliente' : 'Nuevo Gasto'}
               </span>
             </Button>
           </div>
@@ -813,6 +1034,11 @@ export default function App() {
           active={activeTab === 'incomes'}
           onClick={() => setActiveTab('incomes')}
           icon={<TrendingUp className="w-6 h-6" />}
+        />
+        <MobileNavLink
+          active={activeTab === 'autos'}
+          onClick={() => setActiveTab('autos')}
+          icon={<Car className="w-6 h-6" />}
         />
         <MobileNavLink
           active={activeTab === 'history'}

@@ -6,8 +6,7 @@ export const incomesService = {
     const { data, error } = await supabase
       .from('ingresos')
       .select('*')
-      .order('fecha', { ascending: false });
-
+.order('created_at', { ascending: false });
     if (error) {
       throw new Error(`Error al obtener ingresos: ${error.message}`);
     }

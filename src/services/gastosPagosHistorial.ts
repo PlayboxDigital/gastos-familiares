@@ -81,5 +81,16 @@ export const gastosPagosHistorialService = {
       throw new Error(`Error al obtener historial del gasto: ${error.message}`);
     }
     return (data as GastoPagoHistorial[]) || [];
+  },
+
+  async actualizarGastoIdEnPagos(viejoGastoId: string, nuevoGastoId: string): Promise<void> {
+    const { error } = await supabase
+      .from('gastos_pagos_historial')
+      .update({ gasto_id: nuevoGastoId })
+      .eq('gasto_id', viejoGastoId);
+    
+    if (error) {
+      throw new Error(`Error al traspasar pagos: ${error.message}`);
+    }
   }
 };

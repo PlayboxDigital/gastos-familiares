@@ -98,14 +98,46 @@ export type DebtInput = Omit<Debt, 'id' | 'created_at' | 'updated_at' | 'saldo_p
 
 export interface Income {
   id: string;
-  fecha: string;
   cliente: string;
+  cliente_contacto?: string;
+  cliente_enlace?: string;
   concepto: string;
-  monto: number;
+  monto_total: number;
+  monto_cobrado: number;
+  fecha_vencimiento: string;
+  fecha_cobro?: string;
+  estado_pago: PaymentStatus;
   metodo_pago: string;
   observaciones?: string;
   created_at?: string;
   updated_at?: string;
+  // Deprecated fields for compatibility if needed during transition
+  fecha?: string;
+  monto?: number;
 }
 
 export type IncomeInput = Omit<Income, 'id' | 'created_at' | 'updated_at'>;
+
+export interface Auto {
+  id: string;
+  nombre: string;
+  marca?: string;
+  modelo?: string;
+  patente?: string;
+  observaciones?: string;
+  created_at?: string;
+}
+
+export interface AutoMovimiento {
+  id: string;
+  auto_id: string;
+  fecha: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
+  observaciones?: string;
+  created_at?: string;
+}
+
+export type AutoInput = Omit<Auto, 'id' | 'created_at'>;
+export type AutoMovimientoInput = Omit<AutoMovimiento, 'id' | 'created_at'>;
