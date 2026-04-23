@@ -24,11 +24,25 @@ export interface CloudinaryUploadResponse {
 
 export const cloudinaryService = {
   async uploadFile(file: File): Promise<CloudinaryUploadResponse> {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim();
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim();
 
-    if (!cloudName || !uploadPreset) {
-      throw new Error('Configuración de Cloudinary incompleta (VITE_CLOUDINARY_CLOUD_NAME o VITE_CLOUDINARY_UPLOAD_PRESET)');
+    // DIAGNÓSTICO DE VARIABLES
+    console.log('--- CLOUDINARY DIAGNOSTIC START ---');
+    console.log('CLOUDINARY_ENV_CLOUD_NAME:', cloudName || '(VACÍO)');
+    console.log('CLOUDINARY_ENV_UPLOAD_PRESET:', uploadPreset ? `${uploadPreset.substring(0, 3)}...${uploadPreset.substring(uploadPreset.length - 2)}` : '(VACÍO)');
+    console.log('CLOUDINARY_HAS_FILE:', !!file);
+    
+    const isPlaceholder = (val: string | undefined) => 
+      !val || val === 'YOUR_CLOUD_NAME' || val === 'YOUR_PRESET' || val === 'undefined';
+
+    const finalUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    console.log('CLOUDINARY_FINAL_UPLOAD_URL:', finalUrl);
+    console.log('CLOUDINARY_RESOURCE_TYPE:', 'image');
+    console.log('--- CLOUDINARY DIAGNOSTIC END ---');
+
+    if (isPlaceholder(cloudName) || isPlaceholder(uploadPreset)) {
+      throw new Error('Configuración de Cloudinary inválida o faltante. Por favor, configure VITE_CLOUDINARY_CLOUD_NAME y VITE_CLOUDINARY_UPLOAD_PRESET en las variables de entorno.');
     }
 
     const formData = new FormData();
@@ -37,18 +51,25 @@ export const cloudinaryService = {
 
     try {
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+        finalUrl,
         {
           method: 'POST',
           body: formData,
         }
       );
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error?.message || `Error HTTP ${response.status}: Error en la subida a Cloudinary`);
+        let errorDetail = '';
+        try {
+          const data = await response.json();
+          errorDetail = data.error?.message || `Error HTTP ${response.status}`;
+        } catch (e) {
+          errorDetail = `Error HTTP ${response.status}: No se pudo procesar la respuesta del servidor`;
+        }
+        throw new Error(errorDetail);
       }
+
+      const data = await response.json();
 
       // Validar campos esenciales en la respuesta
       if (!data.public_id || !data.secure_url) {
@@ -57,6 +78,10 @@ export const cloudinaryService = {
 
       return data as CloudinaryUploadResponse;
     } catch (error) {
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.error('Cloudinary Network Error (Failed to fetch): Verifique su conexión a internet, si tiene un bloqueador de anuncios o si el Cloud Name es correcto.');
+        throw new Error('Error de red al conectar con Cloudinary. Verifique su conexión o la configuración del servicio (Cloud Name).');
+      }
       console.error('Cloudinary Service Error:', error);
       throw error instanceof Error ? error : new Error('Ocurrió un error inesperado al subir el archivo');
     }

@@ -21,7 +21,7 @@ export const presupuestosService = {
   async guardarPresupuesto(categoria: CategoryConfig | CategoryInput): Promise<void> {
     const { error } = await supabase
       .from('presupuestos_categoria')
-      .upsert(categoria);
+      .upsert(categoria, { onConflict: 'categoria' });
     
     if (error) {
       throw new Error(`Error al guardar presupuesto: ${error.message}`);

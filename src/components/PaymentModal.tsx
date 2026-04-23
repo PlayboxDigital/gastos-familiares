@@ -208,6 +208,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return;
     }
 
+    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) { // 10MB
+      setErrorMsg('El archivo es demasiado grande (máximo 10MB).');
+      return;
+    }
+
     setErrorMsg(null);
     setIsUploading(true);
 

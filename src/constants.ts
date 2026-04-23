@@ -8,6 +8,7 @@ export const CATEGORIES: CategoryConfig[] = [
   { categoria: 'Transporte', limite_mensual: 100000, color: '#06b6d4' },
   { categoria: 'Seguros', limite_mensual: 300000, color: '#ef4444' },
   { categoria: 'Cuidado personal', limite_mensual: 200000, color: '#ec4899' },
+  { categoria: 'Alquiler', limite_mensual: 1000000, color: '#fb923c' },
   { categoria: 'Gastos varios', limite_mensual: 600000, color: '#64748b' },
 ];
 

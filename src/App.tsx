@@ -17,12 +17,22 @@ import {
   PaymentStatus,
   GastoPagoHistorialInput,
   GastoPagoHistorial,
+  Debt,
+  DebtInput,
+  Income,
+  IncomeInput,
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
 import { presupuestosService } from './services/presupuestos';
 import { gastosPagosHistorialService } from './services/gastosPagosHistorial';
+import { deudasService } from './services/deudas';
+import { incomesService } from './services/ingresos';
 import { Button } from '@/components/ui/button';
+import { DebtList } from './components/DebtList';
+import { DebtForm } from './components/DebtForm';
+import { IncomeList } from './components/IncomeList';
+import { IncomeForm } from './components/IncomeForm';
 import {
   Plus,
   LayoutDashboard,
@@ -34,6 +44,9 @@ import {
   Search,
   Menu,
   History as HistoryIcon,
+  CreditCard,
+  TrendingUp,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -68,9 +81,16 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [globalHistory, setGlobalHistory] = useState<GastoPagoHistorial[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDebtFormOpen, setIsDebtFormOpen] = useState(false);
+  const [isIncomeFormOpen, setIsIncomeFormOpen] = useState(false);
+
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
+  const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
+  const [incomeToEdit, setIncomeToEdit] = useState<Income | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isLoading, setIsLoading] = useState(true);
   const [updatingPaymentIds, setUpdatingPaymentIds] = useState<Set<string>>(new Set());
@@ -201,15 +221,21 @@ export default function App() {
           gastosService.obtenerGastos(),
           presupuestosService.obtenerPresupuestos(),
           gastosPagosHistorialService.obtenerTodoElHistorial(),
+          deudasService.obtenerDeudas(),
+          incomesService.obtenerIngresos(),
         ]);
 
         const gastosResult = results[0];
         const presupuestosResult = results[1];
         const historialResult = results[2];
+        const deudasResult = results[3];
+        const ingresosResult = results[4];
 
         console.log("APP_FETCH_GASTOS_STATUS:", gastosResult.status);
         console.log("APP_FETCH_PRESUPUESTOS_STATUS:", presupuestosResult.status);
         console.log("APP_FETCH_HISTORIAL_STATUS:", historialResult.status);
+        console.log("APP_FETCH_DEUDAS_STATUS:", deudasResult.status);
+        console.log("APP_FETCH_INGRESOS_STATUS:", ingresosResult.status);
 
         // Procesar Gastos (Crítico)
         let dbExpenses: Expense[] = [];
@@ -235,6 +261,22 @@ export default function App() {
           console.error("APP_FETCH_HISTORIAL_ERROR:", historialResult.reason);
         }
 
+        // Procesar Deudas (Fallback a [] si falla)
+        let dbDebts: Debt[] = [];
+        if (deudasResult.status === 'fulfilled') {
+          dbDebts = deudasResult.value;
+        } else {
+          console.error("APP_FETCH_DEUDAS_ERROR:", deudasResult.reason);
+        }
+
+        // Procesar Ingresos (Fallback a [] si falla)
+        let dbIncomes: Income[] = [];
+        if (ingresosResult.status === 'fulfilled') {
+          dbIncomes = ingresosResult.value;
+        } else {
+          console.error("APP_FETCH_INGRESOS_ERROR:", ingresosResult.reason);
+        }
+
         console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
         console.log("APP_GASTOS_2_ROWS:", Array.isArray(dbExpenses) ? dbExpenses.length : null);
 
@@ -250,6 +292,8 @@ export default function App() {
 
         setCategories(dbCategories.length > 0 ? dbCategories : CATEGORIES);
         setGlobalHistory(dbHistory);
+        setDebts(dbDebts);
+        setIncomes(dbIncomes);
       } catch (e) {
         console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       } finally {
@@ -279,6 +323,72 @@ export default function App() {
     }
 
     setExpenseToEdit(null);
+  };
+
+  const handleAddDebt = async (newDebt: DebtInput & { id?: string }) => {
+    try {
+      if (newDebt.id) {
+        const { id, ...data } = newDebt;
+        const updated = await deudasService.actualizarDeuda(id, data);
+        setDebts((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      } else {
+        const created = await deudasService.crearDeuda(newDebt);
+        setDebts((prev) => [created, ...prev]);
+      }
+    } catch (error) {
+      console.error('Error al procesar deuda:', error);
+    }
+    setDebtToEdit(null);
+  };
+
+  const handleAddIncome = async (newIncome: IncomeInput & { id?: string }) => {
+    try {
+      if (newIncome.id) {
+        const { id, ...data } = newIncome;
+        const updated = await incomesService.actualizarIngreso(id, data);
+        setIncomes((prev) => prev.map((i) => (i.id === id ? updated : i)));
+      } else {
+        const created = await incomesService.crearIngreso(newIncome);
+        setIncomes((prev) => [created, ...prev]);
+      }
+    } catch (error) {
+      console.error('Error al procesar ingreso:', error);
+    }
+    setIncomeToEdit(null);
+  };
+
+  const handleDeleteDebt = async (id: string) => {
+    console.log("APP_DEBTS_DELETE_START_ID:", id);
+    try {
+      await deudasService.eliminarDeuda(id);
+      console.log("APP_DEBTS_DELETE_SUCCESS_ID:", id);
+      setDebts((prev) => {
+        const next = prev.filter((d) => d.id !== id);
+        console.log("APP_DEBTS_NEW_STATE_COUNT:", next.length);
+        return next;
+      });
+    } catch (error) {
+      console.error('Error al eliminar deuda:', error);
+    }
+  };
+
+  const handleDeleteIncome = async (id: string) => {
+    try {
+      await incomesService.eliminarIngreso(id);
+      setIncomes((prev) => prev.filter((i) => i.id !== id));
+    } catch (error) {
+      console.error('Error al eliminar ingreso:', error);
+    }
+  };
+
+  const handleEditDebt = (debt: Debt) => {
+    setDebtToEdit(debt);
+    setIsDebtFormOpen(true);
+  };
+
+  const handleEditIncome = (income: Income) => {
+    setIncomeToEdit(income);
+    setIsIncomeFormOpen(true);
   };
 
   const handleEditExpense = (expense: Expense) => {
@@ -416,11 +526,12 @@ export default function App() {
     
     switch (activeTab) {
       case 'dashboard':
-        console.log("APP_COMPONENTE_CON_EXPENSES: Dashboard", expenses.length);
         return (
           <Dashboard
             expenses={expenses}
             categories={categories}
+            incomes={incomes}
+            debts={debts}
             onQuickPayExpense={handleActionPayment}
           />
         );
@@ -436,6 +547,23 @@ export default function App() {
             onToggleArchive={handleToggleArchive}
           />
         );
+      case 'debts':
+        return (
+          <DebtList 
+            debts={debts}
+            onEdit={handleEditDebt}
+            onDelete={handleDeleteDebt}
+          />
+        );
+      case 'incomes':
+        return (
+          <IncomeList 
+            incomes={incomes}
+            expenses={expenses}
+            onEdit={handleEditIncome}
+            onDelete={handleDeleteIncome}
+          />
+        );
       case 'settings':
         return <Settings categories={categories} onUpdateLimit={handleUpdateLimit} />;
       default:
@@ -444,10 +572,12 @@ export default function App() {
           <Dashboard
             expenses={expenses}
             categories={categories}
+            incomes={incomes}
+            debts={debts}
             onQuickPayExpense={handleActionPayment}
           />
         );
-    }
+      }
   };
 
   return (
@@ -475,10 +605,22 @@ export default function App() {
             label="Dashboard"
           />
           <SidebarLink
+            active={activeTab === 'incomes'}
+            onClick={() => setActiveTab('incomes')}
+            icon={<TrendingUp className="w-5 h-5" />}
+            label="Ingresos"
+          />
+          <SidebarLink
             active={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
             icon={<HistoryIcon className="w-5 h-5" />}
-            label="Historial de movimientos"
+            label="Historial"
+          />
+          <SidebarLink
+            active={activeTab === 'debts'}
+            onClick={() => setActiveTab('debts')}
+            icon={<CreditCard className="w-5 h-5" />}
+            label="Deudas"
           />
           <SidebarLink
             active={activeTab === 'settings'}
@@ -523,6 +665,10 @@ export default function App() {
                 ? 'Panel de Control'
                 : activeTab === 'history'
                 ? 'Historial de movimientos'
+                : activeTab === 'debts'
+                ? 'Control de Deudas'
+                : activeTab === 'incomes'
+                ? 'Gestión de Ingresos'
                 : 'Configuración'}
             </h2>
           </div>
@@ -542,13 +688,23 @@ export default function App() {
             </Button>
             <Button
               onClick={() => {
-                setExpenseToEdit(null);
-                setIsFormOpen(true);
+                if (activeTab === 'debts') {
+                  setDebtToEdit(null);
+                  setIsDebtFormOpen(true);
+                } else if (activeTab === 'incomes') {
+                  setIncomeToEdit(null);
+                  setIsIncomeFormOpen(true);
+                } else {
+                  setExpenseToEdit(null);
+                  setIsFormOpen(true);
+                }
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 shadow-md shadow-blue-100"
             >
               <Plus className="w-5 h-5 mr-2" />
-              <span className="hidden sm:inline">Nuevo Gasto</span>
+              <span className="hidden sm:inline">
+                {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Ingreso' : 'Nuevo Gasto'}
+              </span>
             </Button>
           </div>
         </header>
@@ -615,6 +771,8 @@ export default function App() {
                   <Dashboard
                     expenses={expenses}
                     categories={categories}
+                    incomes={incomes}
+                    debts={debts}
                     history={globalHistory}
                     onQuickPayExpense={handleActionPayment}
                   />
@@ -645,9 +803,24 @@ export default function App() {
           icon={<LayoutDashboard className="w-6 h-6" />}
         />
         <MobileNavLink
+          active={activeTab === 'monthly-status'}
+          onClick={() => setActiveTab('monthly-status')}
+          icon={<Activity className="w-6 h-6" />}
+        />
+        <MobileNavLink
+          active={activeTab === 'incomes'}
+          onClick={() => setActiveTab('incomes')}
+          icon={<TrendingUp className="w-6 h-6" />}
+        />
+        <MobileNavLink
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
           icon={<HistoryIcon className="w-6 h-6" />}
+        />
+        <MobileNavLink
+          active={activeTab === 'debts'}
+          onClick={() => setActiveTab('debts')}
+          icon={<CreditCard className="w-6 h-6" />}
         />
         <MobileNavLink
           active={activeTab === 'settings'}
@@ -677,6 +850,26 @@ export default function App() {
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
         expense={selectedExpense}
+      />
+
+      <DebtForm
+        isOpen={isDebtFormOpen}
+        onClose={() => {
+          setIsDebtFormOpen(false);
+          setDebtToEdit(null);
+        }}
+        onSubmit={handleAddDebt}
+        debtToEdit={debtToEdit}
+      />
+
+      <IncomeForm
+        isOpen={isIncomeFormOpen}
+        onClose={() => {
+          setIsIncomeFormOpen(false);
+          setIncomeToEdit(null);
+        }}
+        onSubmit={handleAddIncome}
+        incomeToEdit={incomeToEdit}
       />
     </div>
   );

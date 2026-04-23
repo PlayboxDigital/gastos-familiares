@@ -77,3 +77,35 @@ export interface AppState {
   categories: CategoryConfig[];
   responsibles: string[];
 }
+
+export type DebtStatus = 'pendiente' | 'parcial' | 'pagada';
+
+export interface Debt {
+  id: string;
+  acreedor: string;
+  concepto: string;
+  monto_total: number;
+  monto_pagado: number;
+  saldo_pendiente: number;
+  fecha: string;
+  estado: DebtStatus;
+  observaciones?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type DebtInput = Omit<Debt, 'id' | 'created_at' | 'updated_at' | 'saldo_pendiente'>;
+
+export interface Income {
+  id: string;
+  fecha: string;
+  cliente: string;
+  concepto: string;
+  monto: number;
+  metodo_pago: string;
+  observaciones?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type IncomeInput = Omit<Income, 'id' | 'created_at' | 'updated_at'>;

@@ -1,46 +1,34 @@
 import React, { useMemo } from 'react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Legend,
-} from 'recharts';
-import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Tag,
-  AlertCircle,
+  Users,
+  Wallet,
   ArrowUpRight,
   ArrowDownRight,
   Activity,
+  CreditCard,
   CheckCircle2,
   Zap,
   Flame,
   AlertTriangle,
   Coffee,
-  IceCream,
   Pizza,
+  Calendar,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial } from '../types';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt } from '../types';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { getEstadoVencimiento } from '../estadoVencimiento';
 
 interface DashboardProps {
   expenses: Expense[];
   categories: CategoryConfig[];
+  incomes?: Income[];
+  debts?: Debt[];
   history?: GastoPagoHistorial[];
   onQuickPayExpense?: (expense: Expense) => void;
 }
@@ -96,6 +84,8 @@ const getEstadoPagoReal = (
 export const Dashboard: React.FC<DashboardProps> = ({
   expenses = [],
   categories = [],
+  incomes = [],
+  debts = [],
   history = [],
   onQuickPayExpense,
 }) => {
@@ -164,6 +154,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
+  // --- INTEGRACIÓN ESTADO DEL MES ---
+  const monthlyIncomes = useMemo(() => 
+    incomes.filter(i => {
+      try {
+        return isSameMonth(parseISO(i.fecha || ''), currentMonth);
+      } catch {
+        return false;
+      }
+    }),
+  [incomes, currentMonth]);
+
+  const totalIncomes = useMemo(() => 
+    monthlyIncomes.reduce((sum, i) => sum + i.monto, 0),
+  [monthlyIncomes]);
+
+  const availableEstimado = totalIncomes - totalMonthly;
+
+  const uniqueClientsCount = useMemo(() => 
+    new Set(monthlyIncomes.map(i => i.cliente)).size,
+  [monthlyIncomes]);
+
+  const pendingDebtsCount = useMemo(() => 
+    debts.filter(d => d.estado !== 'Pagado').length,
+  [debts]);
+
   const pagosRealizados = useMemo(
     () =>
       monthlyExpenses
@@ -203,39 +218,55 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
-  const categoryData = useMemo(() => {
-    const data: Record<string, number> = {};
-    monthlyExpenses.forEach((e) => {
-      data[e.categoria] = (data[e.categoria] || 0) + e.monto;
-    });
-    return Object.entries(data).map(([name, value]) => ({ name, value }));
-  }, [monthlyExpenses]);
+  const proximosVencimientos = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const responsibleData = useMemo(() => {
-    const data: Record<string, number> = {};
-    monthlyExpenses.forEach((e) => {
-      data[e.responsable] = (data[e.responsable] || 0) + e.monto;
-    });
-    return Object.entries(data).map(([name, value]) => ({ name, value }));
-  }, [monthlyExpenses]);
+    return pagosPendientes
+      .map(e => {
+        let deadlineDate: Date;
+        
+        if (e.dia_vencimiento) {
+          // Si tiene día de vencimiento, asumimos este mes
+          deadlineDate = new Date(today.getFullYear(), today.getMonth(), e.dia_vencimiento);
+        } else {
+          // Si no, usamos la fecha original
+          deadlineDate = parseISO(e.fecha);
+        }
+        deadlineDate.setHours(0, 0, 0, 0);
 
-  const topCategory = useMemo(() => {
-    if (categoryData.length === 0) return { name: '-', value: 0 };
-    return categoryData.reduce((prev, current) => (prev.value > current.value ? prev : current));
-  }, [categoryData]);
+        const diff = differenceInDays(deadlineDate, today);
+        
+        let urgency: 'vencido' | 'hoy' | 'pronto';
+        if (isBefore(deadlineDate, today)) {
+          urgency = 'vencido';
+        } else if (isSameDay(deadlineDate, today)) {
+          urgency = 'hoy';
+        } else if (diff <= 7) {
+          urgency = 'pronto';
+        } else {
+          return null; // Demasiado lejos
+        }
 
-  const avgPerCategory = useMemo(() => {
-    if (categoryData.length === 0) return 0;
-    return totalMonthly / categoryData.length;
-  }, [totalMonthly, categoryData]);
-
-  const alerts = useMemo(() => {
-    return categories.filter((cat) => {
-      if (!cat.limite_mensual) return false;
-      const spent = categoryData.find((c) => c.name === cat.categoria)?.value || 0;
-      return spent > cat.limite_mensual;
-    });
-  }, [categoryData, categories]);
+        return {
+          ...e,
+          deadlineDate,
+          urgency,
+          diff
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+      .sort((a, b) => {
+        // Orden: vencidos primero, luego hoy, luego pronto
+        const order = { vencido: 0, hoy: 1, pronto: 2 };
+        if (order[a.urgency] !== order[b.urgency]) {
+          return order[a.urgency] - order[b.urgency];
+        }
+        // Dentro de la misma categoría, por fecha más cercana
+        return a.deadlineDate.getTime() - b.deadlineDate.getTime();
+      })
+      .slice(0, 5);
+  }, [pagosPendientes, history, currentMonth]);
 
   const pendingEssentialExpenses = useMemo(() => {
     return monthlyExpenses.filter((e) => {
@@ -266,61 +297,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   }, [currentMonth]);
 
-  const dailyData = useMemo(() => {
-    const days: Record<string, number> = {};
-    monthlyExpenses.forEach((e) => {
-      if (!e.fecha) return;
-      try {
-        const parsedDate = parseISO(e.fecha);
-        if (isNaN(parsedDate.getTime())) return;
-        const day = format(parsedDate, 'dd');
-        days[day] = (days[day] || 0) + e.monto;
-      } catch (err) {
-        console.error('Error formatting date:', e.fecha, err);
-      }
-    });
-
-    return Object.entries(days)
-      .map(([day, amount]) => ({ day, amount }))
-      .sort((a, b) => parseInt(a.day) - parseInt(b.day));
-  }, [monthlyExpenses]);
-
   const diaActual = new Date().getDate();
-
-  const historyData = useMemo(() => {
-    console.log("DASHBOARD_CALC_HISTORY_START", expenses.length);
-    try {
-      const last6Months = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        last6Months.push({
-          month: format(d, 'MMM', { locale: es }),
-          key: format(d, 'yyyy-MM'),
-          total: 0,
-        });
-      }
-
-      expenses.forEach((e) => {
-        if (!e.fecha) return;
-        try {
-          const date = parseISO(e.fecha);
-          const key = format(date, 'yyyy-MM');
-          const monthEntry = last6Months.find((m) => m.key === key);
-          if (monthEntry) {
-            monthEntry.total += e.monto;
-          }
-        } catch (err) {
-          console.error('Error parsing date for history:', e.fecha, err);
-        }
-      });
-
-      return last6Months;
-    } catch (e) {
-      console.error("APP_ERROR_DERIVADO_EXPENSES_historyData:", e, expenses);
-      return [];
-    }
-  }, [expenses]);
 
   const essentialOverdueExpenses = useMemo(() => {
     return monthlyExpenses.filter((e) => {
@@ -367,17 +344,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {mostUrgentExpense && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onQuickPayExpense?.(mostUrgentExpense)}
-              className="flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-slate-200 transition-all hover:bg-slate-800"
-            >
-              <Zap className="h-4 w-4 text-amber-400" />
-              Pagar "{mostUrgentExpense.subcategoria}"
-            </motion.button>
-          )}
         </div>
       </div>
 
@@ -437,65 +403,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+        <KPICard
+          title="Ingresado"
+          value={`$${totalIncomes.toLocaleString()}`}
+          icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
+          description="Total ingresos del mes"
+          color="emerald"
+        />
+        <KPICard
+          title="Gastos Totales"
+          value={`$${totalMonthly.toLocaleString()}`}
+          icon={<DollarSign className="h-5 w-5 text-indigo-500" />}
+          description="A pagar este mes"
+          color="indigo"
+        />
+        <KPICard
+          title="Disponible"
+          value={`$${availableEstimado.toLocaleString()}`}
+          icon={<Wallet className="h-5 w-5 text-purple-500" />}
+          description="Balance proyectado"
+          color={availableEstimado >= 0 ? "indigo" : "rose"}
+        />
+        <KPICard
+          title="Cierre de Mes"
+          value={`${Math.round((totalPagado / (totalMonthly || 1)) * 100)}%`}
+          icon={<FlagIcon className="h-5 w-5 text-slate-500" />}
+          description="Progreso de pago"
+          color="slate"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <KPICard
           title="Pagado"
           value={`$${totalPagado.toLocaleString()}`}
           icon={<ArrowDownRight className="h-5 w-5 text-emerald-500" />}
-          description="Dinero ya abonado"
-          trendUp={true}
+          description="Abonado"
+          compact
           color="emerald"
         />
         <KPICard
           title="Pendiente"
           value={`$${totalPendiente.toLocaleString()}`}
           icon={<ArrowUpRight className="h-5 w-5 text-amber-500" />}
-          description="Por pagar este mes"
-          trendUp={false}
+          description="Saldo por pagar"
+          compact
           color="amber"
         />
         <KPICard
-          title="Gasto Total"
-          value={`$${totalMonthly.toLocaleString()}`}
-          icon={<DollarSign className="h-5 w-5 text-indigo-500" />}
-          description={`Total ${currentMonthName}`}
+          title="Clientes"
+          value={uniqueClientsCount.toString()}
+          icon={<Users className="h-5 w-5 text-blue-500" />}
+          description="Activos este mes"
+          compact
           color="indigo"
         />
         <KPICard
-          title="Esenciales"
-          value={pendingEssentialExpenses.length.toString()}
-          icon={<Zap className="h-5 w-5 text-rose-500" />}
-          description="Sin saldar"
+          title="Deudas"
+          value={pendingDebtsCount.toString()}
+          icon={<CreditCard className="h-5 w-5 text-rose-500" />}
+          description="Deudas pendientes"
+          compact
           color="rose"
-        />
-        <KPICard
-          title="Riesgo"
-          value={`$${riesgoFinanciero.toLocaleString()}`}
-          icon={<Flame className="h-5 w-5 text-orange-500" />}
-          description="Total vencidos"
-          color="orange"
         />
       </div>
 
       <div className="space-y-4">
-        {alerts.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3 rounded-2xl border-2 border-red-200 bg-red-50 p-4 shadow-sm"
-          >
-            <div className="rounded-xl bg-red-100 p-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
-            </div>
-            <div>
-              <h4 className="text-sm font-black text-red-900 uppercase tracking-tight">Presupuesto Excedido</h4>
-              <p className="text-xs font-medium text-red-700">
-                Categorías fuera de control: {alerts.map((a) => a.categoria).join(', ')}
-              </p>
-            </div>
-          </motion.div>
-        )}
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -602,27 +576,97 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="p-4 md:px-8 md:pt-8 md:pb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
+          <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 md:gap-3">
-                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl md:rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-200">
-                  <Activity className="h-4 w-4 md:h-5 md:w-5" />
+              <div className="flex items-center gap-2 md:gap-2.5">
+                <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-rose-500 text-white shadow-lg shadow-rose-200">
+                  <Calendar className="h-4 w-4" />
                 </div>
-                <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">Pendientes</CardTitle>
+                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Próximos Vencimientos</CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
+            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+              {proximosVencimientos.length > 0 ? (
+                proximosVencimientos.map((e) => {
+                  const saldo = Math.max(
+                    0,
+                    getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
+                  );
+
+                  const urgencyLabels = {
+                    vencido: { text: 'Vencido', color: 'text-rose-600 bg-rose-50 border-rose-100', icon: <Flame className="w-2.5 h-2.5" /> },
+                    hoy: { text: 'Hoy', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: <Zap className="w-2.5 h-2.5" /> },
+                    pronto: { text: `En ${e.diff}d`, color: 'text-blue-600 bg-blue-50 border-blue-100', icon: <Activity className="w-2.5 h-2.5" /> }
+                  };
+
+                  const config = urgencyLabels[e.urgency];
+
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => onQuickPayExpense?.(e)}
+                      className="group w-full flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-slate-50 text-left active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black text-[10px] ${config.color}`}>
+                          {e.subcategoria?.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{e.subcategoria}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`flex items-center gap-0.5 rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider border ${config.color}`}>
+                              {config.icon}
+                              {config.text}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 italic">
+                               {format(e.deadlineDate, "dd MMM", { locale: es })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right ml-2 shrink-0">
+                        <p className="text-[13px] font-black tabular-nums text-slate-900">
+                          ${saldo.toLocaleString()}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <CheckCircle2 className="h-10 w-10 mb-2 opacity-20" />
+                  <p className="text-[11px] font-bold italic">Sin vencimientos...</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
+          <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 md:gap-2.5">
+                <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-amber-500 text-white shadow-lg shadow-amber-200">
+                  <Activity className="h-4 w-4" />
+                </div>
+                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Pendientes</CardTitle>
               </div>
               {pagosPendientes.length > 0 && (
-                <span className="rounded-full bg-amber-50 px-2 md:px-3 py-1 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
                   {pagosPendientes.length}
                 </span>
               )}
             </div>
           </CardHeader>
-          <CardContent className="px-3 md:px-6 pb-4 md:pb-8 pt-0">
-            <div className="space-y-2">
+          <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
+            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
               {pagosPendientes.length > 0 ? (
-                pagosPendientes.slice(0, 5).map((e) => {
+                pagosPendientes.slice(0, 8).map((e) => {
                   const saldo = Math.max(
                     0,
                     getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
@@ -633,26 +677,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       key={e.id}
                       type="button"
                       onClick={() => onQuickPayExpense?.(e)}
-                      className="group w-full flex items-center justify-between rounded-2xl border-2 border-slate-50 bg-white p-4 transition-all hover:border-amber-200 hover:bg-amber-50/30 text-left active:scale-[0.98]"
+                      className="group w-full flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-amber-50/30 text-left active:scale-[0.98]"
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 font-black text-slate-400 text-xs transition-colors group-hover:bg-amber-100 group-hover:text-amber-600">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 font-black text-slate-400 text-[10px] group-hover:bg-amber-100 group-hover:text-amber-600">
                           {e.subcategoria?.charAt(0) || '?'}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-slate-900">{e.subcategoria}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500 truncate group-hover:bg-white transition-colors">
+                          <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{e.subcategoria}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 truncate group-hover:bg-white">
                               {e.categoria}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400 italic truncate italic">
-                               {e.responsable}
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="text-right ml-4">
-                        <p className="text-base font-black tabular-nums text-slate-900">
+                      <div className="text-right ml-2 shrink-0">
+                        <p className="text-[13px] font-black tabular-nums text-slate-900">
                           ${saldo.toLocaleString()}
                         </p>
                       </div>
@@ -660,57 +701,49 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   );
                 })
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <Pizza className="h-12 w-12 mb-3 opacity-20" />
-                  <p className="text-sm font-bold italic">Nada pendiente por aquí...</p>
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <Pizza className="h-10 w-10 mb-2 opacity-20" />
+                  <p className="text-[11px] font-bold italic">Todo al día...</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="p-4 md:px-8 md:pt-8 md:pb-4">
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
+          <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
              <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 md:gap-3">
-                <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl md:rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
-                  <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" />
+              <div className="flex items-center gap-2 md:gap-2.5">
+                <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+                  <CheckCircle2 className="h-4 w-4" />
                 </div>
-                <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">Realizados</CardTitle>
+                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Realizados</CardTitle>
               </div>
-              {pagosRealizados.length > 0 && (
-                <span className="rounded-full bg-emerald-50 px-2 md:px-3 py-1 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 border border-emerald-100">
-                  {currentMonthName}
-                </span>
-              )}
             </div>
           </CardHeader>
-          <CardContent className="px-3 md:px-6 pb-4 md:pb-8 pt-0">
-            <div className="space-y-2">
+          <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
+            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
               {pagosRealizados.length > 0 ? (
-                pagosRealizados.slice(0, 5).map((e) => (
+                pagosRealizados.slice(0, 8).map((e) => (
                   <div
                     key={e.id}
-                    className="flex items-center justify-between rounded-2xl border-2 border-slate-50 bg-white p-4 transition-all hover:bg-slate-50"
+                    className="flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-slate-50"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 font-black text-emerald-600 text-xs">
-                         <TrendingDown className="h-5 w-5" />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 font-black text-emerald-600 text-[10px]">
+                         <TrendingDown className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-900">{e.subcategoria}</p>
-                         <div className="flex items-center gap-2 mt-0.5">
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500 truncate">
+                        <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{e.subcategoria}</p>
+                         <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 truncate">
                               {e.categoria}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400 italic truncate italic">
-                               {e.responsable}
                             </span>
                           </div>
                       </div>
                     </div>
-                    <div className="text-right ml-4">
-                      <p className="text-base font-black tabular-nums text-emerald-600">
+                    <div className="text-right ml-2 shrink-0">
+                      <p className="text-[13px] font-black tabular-nums text-emerald-600">
                         ${Math.min(
                           e.total_abonado ?? 0,
                           getMontoExigible(e as ExpenseWithCredit)
@@ -720,9 +753,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <Coffee className="h-12 w-12 mb-3 opacity-20" />
-                  <p className="text-sm font-bold italic">Aún no hay pagos...</p>
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <Coffee className="h-10 w-10 mb-2 opacity-20" />
+                  <p className="text-[11px] font-bold italic">Nada pagado aún...</p>
                 </div>
               )}
             </div>
@@ -730,112 +763,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="p-4 md:px-8 md:pt-8">
-            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">
-              Flujo Mensual
-            </CardTitle>
-            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gastos diarios acumulados</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[200px] md:h-[300px] px-2 md:px-4 pb-4 md:pb-8">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="8 8" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 700 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 700 }}
-                  tickFormatter={(val) => `$${val}`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '24px',
-                    border: 'none',
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                    padding: '12px 16px',
-                  }}
-                  itemStyle={{ fontWeight: 800, color: '#1e293b' }}
-                  labelStyle={{ fontWeight: 900, marginBottom: '4px', textTransform: 'uppercase', color: '#64748b', fontSize: '10px' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="amount"
-                  stroke="#6366f1"
-                  strokeWidth={5}
-                  dot={{ r: 6, fill: '#6366f1', strokeWidth: 4, stroke: '#fff' }}
-                  activeDot={{ r: 8, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-          <CardHeader className="p-4 md:px-8 md:pt-8">
-            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight">
-              Categorías
-            </CardTitle>
-            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Distribución porcentual</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[200px] md:h-[300px] px-2 md:px-4 pb-4 md:pb-8">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={100}
-                  paddingAngle={8}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {categoryData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={
-                        categories.find((c) => c.categoria === entry.name)?.color || '#94a3b8'
-                      }
-                      className="hover:opacity-80 transition-opacity outline-none"
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '24px',
-                    border: 'none',
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                  }}
-                />
-                <Legend 
-                  iconType="circle" 
-                  layout="horizontal" 
-                  verticalAlign="bottom" 
-                  align="center"
-                  wrapperStyle={{ paddingTop: '20px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KPICard
-          title="Top Cat."
-          value={topCategory.name}
-          icon={<Tag className="h-4 w-4" />}
-          description={`Subtotal: $${topCategory.value.toLocaleString()}`}
+          title="Esenciales"
+          value={pendingEssentialExpenses.length.toString()}
+          icon={<Zap className="h-4 w-4" />}
+          description="Sin saldar"
           compact
-          color="emerald"
+          color="rose"
+        />
+        <KPICard
+          title="Riesgo"
+          value={`$${riesgoFinanciero.toLocaleString()}`}
+          icon={<Flame className="h-4 w-4" />}
+          description="Total vencidos"
+          compact
+          color="orange"
         />
         <KPICard
           title="Frecuencia"
@@ -846,24 +789,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           color="indigo"
         />
         <KPICard
-          title="Promedio"
-          value={`$${Math.round(avgPerCategory).toLocaleString()}`}
-          icon={<TrendingUp className="h-4 w-4" />}
-          description="Ticket medio"
+          title="Pend. Hoy"
+          value={pagosPendientes.length.toString()}
+          icon={<ArrowUpRight className="h-4 w-4" />}
+          description="Gastos pendientes"
           compact
           color="amber"
         />
-        <KPICard
-          title="Cierre de Mes"
-          value={`${Math.round((totalPagado / (totalMonthly || 1)) * 100)}%`}
-          icon={<FlagIcon className="h-4 w-4" />}
-          description="Progreso de pago"
-          compact
-          color="slate"
-        />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 pb-12">
+      <div className="grid grid-cols-1 pb-12">
         <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
           <CardHeader className="p-4 md:px-8 md:pt-8">
             <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-indigo-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Ranking de Gastos</CardTitle>
@@ -898,80 +833,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
-          <CardHeader className="p-4 md:px-8 md:pt-8">
-            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-amber-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Tendencia Histórica</CardTitle>
-            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total de los últimos 6 meses</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[200px] md:h-[280px] px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={historyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
-                />
-                <YAxis hide />
-                <Tooltip
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{
-                    borderRadius: '16px',
-                    border: 'none',
-                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                  }}
-                  itemStyle={{ fontWeight: 800 }}
-                  labelStyle={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '10px' }}
-                />
-                <Bar 
-                  dataKey="total" 
-                  fill="#f59e0b" 
-                  radius={[8, 8, 8, 8]}
-                  barSize={40}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="hidden md:block rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">
-          <CardHeader className="p-4 md:px-8 md:pt-8">
-            <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-emerald-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Miembros</CardTitle>
-            <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Gasto total acumulado por responsable</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[200px] md:h-[280px] px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={responsibleData} layout="vertical" margin={{ left: 20, right: 40, top: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="6 6" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#475569', fontWeight: 800, textTransform: 'uppercase' }}
-                  width={90}
-                />
-                <Tooltip
-                    cursor={{ fill: 'rgba(241, 245, 249, 0.5)', radius: 12 }}
-                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar 
-                  dataKey="value" 
-                  fill="#6366f1" 
-                  radius={[0, 12, 12, 0]} 
-                  barSize={24}
-                >
-                    {responsibleData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#6366f1' : index === 1 ? '#8b5cf6' : '#ec4899'} />
-                    ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
