@@ -31,6 +31,7 @@ interface DashboardProps {
   debts?: Debt[];
   history?: GastoPagoHistorial[];
   onQuickPayExpense?: (expense: Expense) => void;
+  onTabChange?: (tab: string) => void;
 }
 
 type ExpenseWithCredit = Expense & {
@@ -54,30 +55,31 @@ const getEstadoPagoReal = (
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth() + 1;
 
-  // Verificamos si hay un pago registrado para este gasto ESPECIFICO en este periodo
-  const paymentForPeriod = history.find(h => 
-    h.gasto_id === expense.id && 
-    h.periodo_anio === year && 
-    h.periodo_mes === month
-  );
-
-  if (paymentForPeriod) {
-    return 'Pagado';
-  }
+  // Calculamos cuánto se ha pagado en este periodo específico
+  const paidThisPeriod = history
+    .filter(h => 
+      h.gasto_id === expense.id && 
+      h.periodo_anio === year && 
+      h.periodo_mes === month
+    )
+    .reduce((sum, h) => sum + h.monto_pagado, 0);
 
   const montoExigible = getMontoExigible(expense);
-  const totalAbonado = expense.total_abonado ?? 0;
 
-  // Si no hay pago en el historial, pero el estado es Pagado y no tiene historial previo, 
-  // respetamos la marca manual (retrocompatibilidad)
-  if (expense.estado_pago === 'Pagado' && !history.some(h => h.gasto_id === expense.id)) {
-    return 'Pagado';
-  }
-
+  // Regla automática: Prioridad al monto pagado en el periodo
   if (montoExigible <= 0) return 'Pagado';
-  // Si no hay registro en el historial para este mes, lo consideramos pendiente para este mes 
-  // (a menos que el total abonado sea suficiente para cubrir el monto del mes y no usemos historial aún)
+  if (paidThisPeriod >= montoExigible) return 'Pagado';
+  if (paidThisPeriod > 0) return 'Parcial';
+
+  // Fallback para gastos que pudieran haber sido marcados como pagados manualmente 
+  // o que el total_abonado general ya cubra el monto exigible (aunque no haya historial de este mes)
+  if (expense.estado_pago === 'Pagado') return 'Pagado';
+  if (expense.estado_pago === 'Parcial') return 'Parcial';
   
+  const totalAbonadoGral = expense.total_abonado ?? 0;
+  if (totalAbonadoGral >= montoExigible) return 'Pagado';
+  if (totalAbonadoGral > 0) return 'Parcial';
+
   return 'Pendiente';
 };
 
@@ -88,6 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   debts = [],
   history = [],
   onQuickPayExpense,
+  onTabChange,
 }) => {
   const currentMonth = new Date();
 
@@ -458,6 +461,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           description="Activos este mes"
           compact
           color="indigo"
+          onClick={() => onTabChange?.('incomes')}
         />
         <KPICard
           title="Deudas"
@@ -466,6 +470,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           description="Deudas pendientes"
           compact
           color="rose"
+          onClick={() => onTabChange?.('debts')}
         />
       </div>
 
@@ -853,6 +858,7 @@ interface KPICardProps {
   trendUp?: boolean;
   compact?: boolean;
   color?: 'emerald' | 'amber' | 'indigo' | 'rose' | 'orange' | 'slate';
+  onClick?: () => void;
 }
 
 const KPICard: React.FC<KPICardProps> = ({ 
@@ -862,7 +868,8 @@ const KPICard: React.FC<KPICardProps> = ({
     description, 
     trendUp, 
     compact,
-    color = 'slate' 
+    color = 'slate',
+    onClick
 }) => {
   const colorStyles = {
     emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/50 overflow-hidden',
@@ -886,6 +893,8 @@ const KPICard: React.FC<KPICardProps> = ({
     <motion.div
       whileHover={{ scale: 1.02, y: -4 }}
       transition={{ type: "spring", stiffness: 300 }}
+      onClick={onClick}
+      className={onClick ? 'cursor-pointer' : ''}
     >
       <Card className={`relative h-full overflow-hidden border-none bg-white p-3 md:p-5 shadow-xl transition-all duration-300 ${compact ? 'rounded-xl md:rounded-[1.5rem]' : 'rounded-2xl md:rounded-[2rem]'}`}>
         <div className={`absolute -right-6 -top-6 h-12 w-12 md:h-20 md:w-20 rounded-full opacity-[0.03] ${iconBgStyles[color]}`} />

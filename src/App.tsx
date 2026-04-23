@@ -475,6 +475,7 @@ export default function App() {
       );
 
       await gastosPagosHistorialService.crearPagoHistorial(pago);
+      await gastosService.actualizarGasto(expenseId, updateData as any);
 
       const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
       setGlobalHistory(updatedHistory);
@@ -775,6 +776,7 @@ export default function App() {
                     debts={debts}
                     history={globalHistory}
                     onQuickPayExpense={handleActionPayment}
+                    onTabChange={setActiveTab}
                   />
                 ) : (
                   <AnimatePresence mode="wait">
