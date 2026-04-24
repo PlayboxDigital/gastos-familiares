@@ -1098,6 +1098,7 @@ export default function App() {
         }}
         onSubmit={handleAddIncome}
         incomeToEdit={incomeToEdit}
+        incomes={incomes}
       />
     </div>
   );

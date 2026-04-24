@@ -5,12 +5,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
-  Search, Edit2, Trash2, Filter, TrendingUp, Users, Calendar, DollarSign 
+  Search, Edit2, Trash2, Filter, TrendingUp, Users, Calendar, DollarSign, 
+  ExternalLink, Github, Database, Globe, User, Code, Phone
 } from 'lucide-react';
 import { Income, Expense } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface IncomeListProps {
   incomes: Income[];
@@ -35,7 +42,6 @@ export const IncomeList: React.FC<IncomeListProps> = ({
   const setSearchTerm = onSearchChange || setInternalSearchTerm;
 
   const [clientFilter, setClientFilter] = useState('Todos');
-  const [methodFilter, setMethodFilter] = useState('Todos');
 
   const now = new Date();
   const todayStr = format(now, 'yyyy-MM-dd');
@@ -44,49 +50,33 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     return incomes.filter(income => {
       const matchesSearch = 
         income.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        income.concepto.toLowerCase().includes(searchTerm.toLowerCase());
+        (income.descripcion_servicio || income.concepto).toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesClient = clientFilter === 'Todos' || income.cliente === clientFilter;
-      const matchesMethod = methodFilter === 'Todos' || income.metodo_pago === methodFilter;
 
-      return matchesSearch && matchesClient && matchesMethod;
+      return matchesSearch && matchesClient;
     });
-  }, [incomes, searchTerm, clientFilter, methodFilter]);
+  }, [incomes, searchTerm, clientFilter]);
 
   // Bloques de datos
   const pendingIncomes = useMemo(() => 
     filteredIncomes.filter(i => i.estado_pago !== 'Pagado')
-    .sort((a,b) => (a.fecha_vencimiento || '').localeCompare(b.fecha_vencimiento || '')),
+    .sort((a,b) => (a.dia_vencimiento || 10) - (b.dia_vencimiento || 10)),
   [filteredIncomes]);
 
   const collectedIncomes = useMemo(() => 
     filteredIncomes.filter(i => i.estado_pago === 'Pagado')
-    .sort((a,b) => (b.fecha_cobro || '').localeCompare(a.fecha_cobro || '') || (b.fecha_vencimiento || '').localeCompare(a.fecha_vencimiento || '')),
+    .sort((a,b) => (b.fecha_cobro || '').localeCompare(a.fecha_cobro || '')),
   [filteredIncomes]);
 
   // KPIs
-  const totalACobrar = useMemo(() => 
+  const totalACobrarARS = useMemo(() => 
     incomes.filter(i => i.estado_pago !== 'Pagado')
-    .reduce((sum, i) => sum + (i.monto_total - i.monto_cobrado), 0),
+    .reduce((sum, i) => sum + (i.monto_mensual_ars || i.monto_total || 0), 0),
   [incomes]);
 
-  const totalCobradoHistorico = useMemo(() => 
-    incomes.reduce((sum, i) => sum + i.monto_cobrado, 0),
-  [incomes]);
-
+  const cantClientes = incomes.length;
   const cantPendientes = incomes.filter(i => i.estado_pago !== 'Pagado').length;
-
-  const getAlertStyle = (fechaVenc: string) => {
-    if (!fechaVenc) return 'text-slate-400';
-    if (fechaVenc < todayStr) return 'text-red-600 font-bold';
-    if (fechaVenc === todayStr) return 'text-amber-600 font-bold';
-    
-    const vencDate = parseISO(fechaVenc);
-    const diffDays = Math.ceil((vencDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays <= 7) return 'text-blue-600 font-medium';
-    return 'text-slate-600';
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -101,10 +91,28 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     return ['Todos', ...list];
   }, [incomes]);
 
-  const methods = useMemo(() => {
-    const list = Array.from(new Set(incomes.map(i => i.metodo_pago)));
-    return ['Todos', ...list];
-  }, [incomes]);
+  const TechIndicator: React.FC<{ url?: string; email?: string; icon: React.ReactNode; label: string }> = ({ url, email, icon, label }) => {
+    if (!url && !email) return null;
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div 
+              className={`p-1.5 rounded-lg transition-all border ${url ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer' : 'opacity-30 border-transparent text-slate-300'}`}
+              onClick={() => url && window.open(url, '_blank')}
+            >
+              {icon}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="bg-slate-900 text-white border-none p-3 rounded-xl shadow-xl">
+            <p className="font-bold text-[10px] uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+            {email && <p className="text-xs font-mono">{email}</p>}
+            {url && <p className="text-[9px] text-blue-400 truncate max-w-[200px] mt-1">{url}</p>}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
 
   const renderTable = (data: Income[], title: string, icon: React.ReactNode, emptyMsg: string) => (
     <div className="space-y-4">
@@ -115,15 +123,15 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">{title} ({data.length})</h3>
       </div>
       
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader className="bg-slate-50/50">
             <TableRow className="hover:bg-transparent border-slate-100">
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 px-6">Vencimiento</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 px-6 shrink-0">Vence</TableHead>
               <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Cliente / Contacto</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Concepto</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Monto Total</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Cobrado</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">App / Servicio</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Monto Mensual</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Accesos</TableHead>
               <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Estado</TableHead>
               <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 text-right pr-6">Acciones</TableHead>
             </TableRow>
@@ -139,51 +147,62 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                    className="group hover:bg-slate-50/50 transition-colors border-slate-50"
                 >
                   <TableCell className="py-4 px-6">
-                    <div className="flex flex-col">
-                      <span className={`text-sm ${getAlertStyle(income.fecha_vencimiento || '')}`}>
-                        {income.fecha_vencimiento ? format(parseISO(income.fecha_vencimiento), "dd 'de' MMM", { locale: es }) : 'S/V'}
-                      </span>
-                      {income.fecha_cobro && (
-                        <span className="text-[9px] text-emerald-500 font-bold uppercase">
-                          Cobrado: {format(parseISO(income.fecha_cobro), 'dd/MM')}
-                        </span>
-                      )}
+                    <div className="flex items-center gap-1.5 font-black text-slate-900">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      Día {income.dia_vencimiento || 10}
                     </div>
                   </TableCell>
                   <TableCell className="py-4 font-bold text-slate-700">
                     <div className="flex flex-col">
-                      <span>{income.cliente}</span>
-                      {income.cliente_contacto && (
-                        <span className="text-[10px] text-slate-400 font-normal">{income.cliente_contacto}</span>
+                      <span className="flex items-center gap-1.5">
+                        {income.cliente}
+                      </span>
+                      {(income.telefono_cliente || income.cliente_contacto) && (
+                        <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
+                          <Phone className="w-2.5 h-2.5" />
+                          {income.telefono_cliente || income.cliente_contacto}
+                        </span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="py-4 text-sm text-slate-600 font-medium">
-                    {income.concepto}
+                    <div className="flex flex-col">
+                      <span>{income.descripcion_servicio || income.concepto}</span>
+                      {income.vscode_info && (
+                        <span className="text-[9px] text-blue-500 font-bold flex items-center gap-1 mt-1">
+                          <Code className="w-2.5 h-2.5" /> {income.vscode_info}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
-                  <TableCell className="py-4 font-black text-slate-900">
-                    ${income.monto_total.toLocaleString()}
+                  <TableCell className="py-4">
+                    <div className="flex flex-col">
+                      <span className="font-black text-slate-900">
+                        {income.moneda === 'USD' ? `U$D ${income.monto_mensual}` : `$${(income.monto_mensual || income.monto_mensual_ars || income.monto_total || 0).toLocaleString()}`}
+                      </span>
+                      {income.moneda === 'USD' && (
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          Eq: ${(income.monto_mensual_ars || income.monto_total || 0).toLocaleString()} ARS
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
-                  <TableCell className="py-4 font-bold text-emerald-600">
-                    ${income.monto_cobrado.toLocaleString()}
+                  <TableCell className="py-4">
+                    <div className="flex items-center gap-1">
+                      <TechIndicator icon={<Database className="w-3.5 h-3.5" />} url={income.supabase_url} email={income.supabase_email} label="Supabase" />
+                      <TechIndicator icon={<Globe className="w-3.5 h-3.5" />} url={income.cloudinary_url} email={income.cloudinary_email} label="Cloudinary" />
+                      <TechIndicator icon={<Github className="w-3.5 h-3.5" />} url={income.github_url} email={income.github_email} label="GitHub" />
+                      <TechIndicator icon={<TrendingUp className="w-3.5 h-3.5" />} url={income.ai_studio_url} email={income.ai_studio_email} label="AI Studio" />
+                      <TechIndicator icon={<Code className="w-3.5 h-3.5" />} url={income.vscode_url} email={income.vscode_email} label="VS Code" />
+                    </div>
                   </TableCell>
                   <TableCell className="py-4">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${getStatusBadge(income.estado_pago)}`}>
                       {income.estado_pago}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right py-4 pr-6">
+                  <TableCell className="text-right py-4 pr-6 shrink-0">
                     <div className="flex justify-end gap-1">
-                      {income.cliente_enlace && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-300 hover:text-purple-600 hover:bg-purple-50 transition-all rounded-lg"
-                          onClick={() => window.open(income.cliente_enlace, '_blank')}
-                        >
-                          <Users className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -236,8 +255,8 @@ export const IncomeList: React.FC<IncomeListProps> = ({
             <DollarSign className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total a Cobrar</p>
-            <p className="text-2xl font-black text-slate-900">${totalACobrar.toLocaleString()}</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total por Cobrar (ARS)</p>
+            <p className="text-2xl font-black text-slate-900">${totalACobrarARS.toLocaleString()}</p>
           </div>
         </motion.div>
 
@@ -251,8 +270,8 @@ export const IncomeList: React.FC<IncomeListProps> = ({
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Cobrado (Hist.)</p>
-            <p className="text-2xl font-black text-slate-900">${totalCobradoHistorico.toLocaleString()}</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Clientes</p>
+            <p className="text-2xl font-black text-slate-900">{cantClientes}</p>
           </div>
         </motion.div>
 
@@ -277,7 +296,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Buscar cliente o concepto..."
+            placeholder="Buscar por cliente o servicio..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 bg-slate-50 border-none rounded-xl"
@@ -294,23 +313,13 @@ export const IncomeList: React.FC<IncomeListProps> = ({
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <select 
-            className="bg-slate-50 border-none text-sm px-3 py-2 rounded-xl focus:outline-none text-slate-700 min-w-[140px]"
-            value={methodFilter}
-            onChange={(e) => setMethodFilter(e.target.value)}
-          >
-            <option value="Todos">Métodos Pago</option>
-            {methods.filter(m => m !== 'Todos').map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
         </div>
       </div>
 
       {/* Tables Section */}
       {renderTable(
         pendingIncomes, 
-        "Clientes por Cobrar", 
+        "Cobranzas Pendientes", 
         <Calendar className="w-4 h-4" />, 
         "No hay cobros pendientes registrados"
       )}

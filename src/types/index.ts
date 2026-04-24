@@ -10,7 +10,8 @@ export interface Expense {
   subcategoria: string;
   responsable: string;
   prioridad: Priority;
-  tipo?: string;
+  tipo_gasto?: 'fijo' | 'variable'; // Prompt 087
+  tipo?: string; 
   concepto?: string;
   estado_pago: PaymentStatus;
   fecha_pago?: string | null;
@@ -99,6 +100,29 @@ export type DebtInput = Omit<Debt, 'id' | 'created_at' | 'updated_at' | 'saldo_p
 export interface Income {
   id: string;
   cliente: string;
+  telefono_cliente?: string;
+  descripcion_servicio?: string;
+  
+  // Accesos
+  supabase_url?: string;
+  supabase_email?: string;
+  cloudinary_url?: string;
+  cloudinary_email?: string;
+  github_url?: string;
+  github_email?: string;
+  ai_studio_url?: string;
+  ai_studio_email?: string;
+  vscode_url?: string;
+  vscode_email?: string;
+  vscode_info?: string;
+
+  // Finanzas
+  monto_mensual?: number;
+  moneda?: 'ARS' | 'USD';
+  monto_mensual_ars?: number;
+  dia_vencimiento?: number;
+
+  // Compatibilidad / Otros
   cliente_contacto?: string;
   cliente_enlace?: string;
   concepto: string;
@@ -111,7 +135,6 @@ export interface Income {
   observaciones?: string;
   created_at?: string;
   updated_at?: string;
-  // Deprecated fields for compatibility if needed during transition
   fecha?: string;
   monto?: number;
 }

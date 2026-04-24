@@ -19,10 +19,11 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt } from '../types';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { getEstadoVencimiento } from '../estadoVencimiento';
+import { generateExpenseOccurrences, isVariableExpense } from '../utils/expenseLogic';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -105,9 +106,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const result = expenses.filter((e) => {
         if (!e.fecha || e.archived) return false;
         try {
-          const date = parseISO(e.fecha);
-          // Un gasto es exigible este mes si su fecha de inicio es anterior o igual a este mes
-          return startOfMonth(date) <= monthEnd;
+          // Usamos la lógica centralizada de ocurrencias para determinar si el gasto aplica a este mes
+          const occurrences = generateExpenseOccurrences(e, currentMonth);
+          return occurrences.some(occ => isSameMonth(occ, currentMonth));
         } catch (err) {
           console.error('Error parsing date:', e.fecha, err);
           return false;
@@ -119,7 +120,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       console.error("APP_ERROR_DERIVADO_EXPENSES_monthlyExpenses:", e, expenses);
       return [];
     }
-  }, [expenses, monthEnd]);
+  }, [expenses, currentMonth]);
 
   const getStatus = (e: Expense) => getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
 
@@ -159,7 +160,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
-  // --- INTEGRACIÓN ESTADO DEL MES ---
+  // --- CÁLCULO DE LÍMITES POR RUBRO (Prompt 094) ---
+  const categoryMetrics = useMemo(() => {
+    return categories
+      .map(cat => {
+        const spent = monthlyExpenses
+          .filter(e => e.categoria === cat.categoria)
+          .reduce((sum, e) => sum + e.monto, 0);
+        
+        const limit = cat.limite_mensual || 0;
+        const percent = limit > 0 ? (spent / limit) * 100 : 0;
+        
+        let status: 'ok' | 'warning' | 'exceeded' | 'no-limit' = 'ok';
+        if (limit === 0) status = 'no-limit';
+        else if (percent >= 100) status = 'exceeded';
+        else if (percent >= 80) status = 'warning';
+        
+        return {
+          ...cat,
+          spent,
+          limit,
+          percent: Math.min(100, percent),
+          realPercent: percent,
+          status
+        };
+      })
+      .sort((a, b) => {
+        // Ordenar: Excedidos primero, luego porcentajes altos, luego sin límite al final
+        if (a.status === 'no-limit' && b.status !== 'no-limit') return 1;
+        if (a.status !== 'no-limit' && b.status === 'no-limit') return -1;
+        return b.realPercent - a.realPercent;
+      });
+  }, [categories, monthlyExpenses]);
   const monthlyIncomes = useMemo(() => 
     incomes.filter(i => {
       try {
@@ -466,6 +498,82 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="space-y-4">
+        {categoryMetrics.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="rounded-2xl md:rounded-3xl border border-slate-100 bg-white shadow-sm overflow-hidden md:col-span-2">
+              <CardHeader className="p-4 md:p-6 pb-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-black text-slate-900 tracking-tight">Control de Presupuesto Mensual</CardTitle>
+                    <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Control por rubro / categoría</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> OK
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> 80%+
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500" /> CRÍTICO
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 md:p-6 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {categoryMetrics.map((cat) => (
+                    <div key={cat.categoria} className="space-y-2 group p-4 rounded-2xl bg-slate-50/50 border border-transparent hover:border-slate-100 transition-all hover:bg-white hover:shadow-md">
+                      <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-tight">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                          <span className="text-slate-700 truncate">{cat.categoria}</span>
+                        </div>
+                        <span className={
+                          cat.status === 'exceeded' ? 'text-rose-600' : 
+                          cat.status === 'warning' ? 'text-amber-600' : 
+                          'text-slate-400 font-bold'
+                        }>
+                          ${cat.spent.toLocaleString()} <span className="text-slate-300">/</span> {cat.limit > 0 ? `$${cat.limit.toLocaleString()}` : <span className="text-slate-300 opacity-50">—</span>}
+                        </span>
+                      </div>
+
+                      {cat.limit > 0 ? (
+                        <>
+                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${cat.percent}%` }}
+                              className={`h-full rounded-full transition-all ${
+                                cat.status === 'exceeded' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
+                                cat.status === 'warning' ? 'bg-amber-500' : 
+                                'bg-emerald-500'
+                              }`}
+                            />
+                          </div>
+                          <div className="flex justify-between items-center h-4">
+                            <span className={`text-[9px] font-bold ${
+                              cat.status === 'exceeded' ? 'text-rose-500' : 'text-slate-400'
+                            }`}>
+                              {cat.status === 'exceeded' ? 'Límite excedido' : `${Math.round(cat.realPercent)}% consumido`}
+                            </span>
+                            {cat.status === 'exceeded' && <AlertTriangle className="w-3 h-3 text-rose-500 animate-pulse" />}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between h-5">
+                          <span className="text-[9px] font-bold text-slate-400 italic">Sin límite configurado</span>
+                          <span className="text-[8px] font-black text-slate-300 uppercase tracking-tighter bg-slate-100 px-1 rounded">Budget Off</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

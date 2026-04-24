@@ -39,6 +39,7 @@ import {
 import { format, isWithinInterval, parseISO, addMonths, startOfMonth, differenceInMonths, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
+import { generateExpenseOccurrences } from '../utils/expenseLogic';
 
 const StatusFilterButton = ({ 
   label, 
@@ -185,14 +186,9 @@ export function PaymentHistory({
           let vencidosCount = 0;
 
           expenses.forEach(e => {
-            const startDate = safeParseDate(e.fecha);
-            if (!startDate || !isValid(startDate)) return;
+            const occurrences = generateExpenseOccurrences(e, new Date());
 
-            const firstMonth = startOfMonth(startDate);
-            const lastMonth = todayStart;
-
-            let current = firstMonth;
-            while (current <= lastMonth) {
+            occurrences.forEach(current => {
               const year = current.getFullYear();
               const month = current.getMonth() + 1;
 
@@ -209,6 +205,7 @@ export function PaymentHistory({
                 const isSameMonth = current.getFullYear() === todayLocal.getFullYear() && current.getMonth() === todayLocal.getMonth();
 
                 let status: 'vencido' | 'por_vencer' | 'pendiente' = 'pendiente';
+                const todayStart = startOfMonth(new Date());
                 
                 if (current < todayStart) {
                   status = 'vencido';
@@ -241,8 +238,7 @@ export function PaymentHistory({
                   archived: e.archived || false
                 });
               }
-              current = addMonths(current, 1);
-            }
+            });
           });
 
           console.log(`[AUDITORIA_VENCIDOS] TOTAL_GAPS: ${gapItems.length} | VENCIDOS_DETECTADOS: ${vencidosCount}`);

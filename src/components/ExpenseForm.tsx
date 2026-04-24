@@ -31,6 +31,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     estado_pago: 'Pendiente',
     fecha_pago: null,
     dia_vencimiento: new Date().getDate(),
+    tipo_gasto: 'fijo',
   });
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         estado_pago: expenseToEdit.estado_pago || 'Pendiente',
         fecha_pago: expenseToEdit.fecha_pago || null,
         dia_vencimiento: expenseToEdit.dia_vencimiento || (expenseToEdit.fecha ? new Date(expenseToEdit.fecha + 'T12:00:00').getDate() : new Date().getDate()),
+        tipo_gasto: expenseToEdit.tipo_gasto || (expenseToEdit.tipo?.toLowerCase() === 'variable' ? 'variable' : 'fijo'),
         tipo: expenseToEdit.tipo || 'Fijo',
         // Preservar campos que no están en el formulario pero son parte del modelo
         ...((expenseToEdit as any).id_pago_original ? { id_pago_original: (expenseToEdit as any).id_pago_original } : {}),
@@ -62,6 +64,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         estado_pago: 'Pendiente',
         fecha_pago: null,
         dia_vencimiento: new Date().getDate(),
+        tipo_gasto: 'fijo',
         tipo: 'Fijo',
       });
     }
@@ -190,17 +193,17 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
               )}
             </div>
             <div className="space-y-2">
-              <Label className="text-xs font-bold text-slate-500 uppercase">Tipo</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase">Tipo de Gasto</Label>
               <Select 
-                value={formData.tipo || 'Fijo'} 
-                onValueChange={(v) => setFormData({ ...formData, tipo: v })}
+                value={formData.tipo_gasto || 'fijo'} 
+                onValueChange={(v: 'fijo' | 'variable') => setFormData({ ...formData, tipo_gasto: v, tipo: v === 'variable' ? 'Variable' : 'Fijo' })}
               >
                 <SelectTrigger className="bg-slate-50 border-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Fijo">Fijo</SelectItem>
-                  <SelectItem value="Variable">Variable</SelectItem>
+                  <SelectItem value="fijo">Fijo</SelectItem>
+                  <SelectItem value="variable">Variable</SelectItem>
                 </SelectContent>
               </Select>
             </div>
