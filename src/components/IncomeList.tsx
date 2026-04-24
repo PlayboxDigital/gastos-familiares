@@ -24,15 +24,19 @@ interface IncomeListProps {
   expenses: Expense[];
   onEdit: (income: Income) => void;
   onDelete: (id: string) => void;
+  onImport: (clients: IncomeInput[]) => Promise<{ success: number; skipped: number; errors: string[] }>;
   searchTerm?: string;
   onSearchChange?: (val: string) => void;
 }
+
+import { ClientImporter } from './ClientImporter';
 
 export const IncomeList: React.FC<IncomeListProps> = ({ 
   incomes, 
   expenses, 
   onEdit, 
   onDelete,
+  onImport,
   searchTerm: externalSearchTerm,
   onSearchChange
 }) => {
@@ -153,16 +157,27 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                     </div>
                   </TableCell>
                   <TableCell className="py-4 font-bold text-slate-700">
-                    <div className="flex flex-col">
-                      <span className="flex items-center gap-1.5">
-                        {income.cliente}
-                      </span>
-                      {(income.telefono_cliente || income.cliente_contacto) && (
-                        <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
-                          <Phone className="w-2.5 h-2.5" />
-                          {income.telefono_cliente || income.cliente_contacto}
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 border border-slate-200/50 shadow-sm">
+                        {income.logo_url ? (
+                          <img src={income.logo_url} alt={income.cliente} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-sm font-black text-slate-400">
+                            {income.cliente.substring(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="flex items-center gap-1.5">
+                          {income.cliente}
                         </span>
-                      )}
+                        {(income.telefono_cliente || income.cliente_contacto) && (
+                          <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
+                            <Phone className="w-2.5 h-2.5" />
+                            {income.telefono_cliente || income.cliente_contacto}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="py-4 text-sm text-slate-600 font-medium">
@@ -293,14 +308,17 @@ export const IncomeList: React.FC<IncomeListProps> = ({
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder="Buscar por cliente o servicio..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-slate-50 border-none rounded-xl"
-          />
+        <div className="flex flex-1 w-full gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Buscar por cliente o servicio..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-slate-50 border-none rounded-xl"
+            />
+          </div>
+          <ClientImporter onImport={onImport} existingIncomes={incomes} />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <select 

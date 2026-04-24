@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
+import { Globe, Users, Phone, DollarSign, Database, Github, Code, TrendingUp, Info } from 'lucide-react';
 import { Income, IncomeInput, PaymentStatus } from '../types';
 import { format } from 'date-fns';
 
@@ -26,6 +27,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     cliente: '',
     telefono_cliente: '',
     descripcion_servicio: '',
+    logo_url: '',
     supabase_url: '',
     supabase_email: '',
     cloudinary_url: '',
@@ -51,7 +53,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     observaciones: '',
   });
 
-  // Tarea 3: Obtener mails únicos cargados
+  // Tarea: Obtener mails únicos cargados para sugerencias
   const existingEmails = React.useMemo(() => {
     const emails = new Set<string>();
     incomes.forEach(i => {
@@ -64,6 +66,21 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     return Array.from(emails).sort();
   }, [incomes]);
 
+  const handleInputChange = (field: keyof IncomeInput, value: any) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Predictibilidad: Si se pega un repo de github y el mail está vacío,
+      // podríamos sugerir o autocompletar con el último mail de github usado
+      if (field === 'github_url' && value && !prev.github_email) {
+        const lastGithubEmail = incomes.find(i => i.github_email)?.github_email;
+        if (lastGithubEmail) newData.github_email = lastGithubEmail;
+      }
+      
+      return newData;
+    });
+  };
+
   useEffect(() => {
     if (incomeToEdit) {
       setFormData({
@@ -72,6 +89,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         cliente: incomeToEdit.cliente || '',
         telefono_cliente: incomeToEdit.telefono_cliente || incomeToEdit.cliente_contacto || '',
         descripcion_servicio: incomeToEdit.descripcion_servicio || incomeToEdit.concepto || '',
+        logo_url: incomeToEdit.logo_url || (incomeToEdit.cloudinary_url?.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? incomeToEdit.cloudinary_url : ''),
         // Compatibilidad VS Code
         vscode_url: incomeToEdit.vscode_url || (incomeToEdit.vscode_info?.startsWith('http') ? incomeToEdit.vscode_info : ''),
         vscode_info: incomeToEdit.vscode_info || '',
@@ -85,6 +103,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         cliente: '',
         telefono_cliente: '',
         descripcion_servicio: '',
+        logo_url: '',
         supabase_url: '',
         supabase_email: '',
         cloudinary_url: '',
@@ -158,238 +177,282 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
             Información técnica y comercial del servicio administrado.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          
-          {/* SECCIÓN 1: DATOS DEL CLIENTE */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b pb-1">1. Cliente</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="cliente" className="text-xs font-bold text-slate-500 uppercase">Nombre / Empresa</Label>
-                <Input 
-                  id="cliente" 
-                  value={formData.cliente}
-                  onChange={(e) => setFormData({ ...formData, cliente: e.target.value })}
-                  required
-                  placeholder="Nombre del cliente..."
-                  className="bg-slate-50 border-none px-4 py-2 rounded-xl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="telefono_cliente" className="text-xs font-bold text-slate-500 uppercase">Teléfono de Contacto</Label>
-                <Input 
-                  id="telefono_cliente" 
-                  value={formData.telefono_cliente}
-                  onChange={(e) => setFormData({ ...formData, telefono_cliente: e.target.value })}
-                  placeholder="+54 9..."
-                  className="bg-slate-50 border-none px-4 py-2 rounded-xl"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* SECCIÓN 2: DATOS DEL SERVICIO */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b pb-1">2. Servicio Administrado</h3>
-            <div className="space-y-2">
-              <Label htmlFor="descripcion_servicio" className="text-xs font-bold text-slate-500 uppercase">Descripción / Mantenimiento</Label>
-              <Input 
-                id="descripcion_servicio" 
-                value={formData.descripcion_servicio}
-                onChange={(e) => setFormData({ ...formData, descripcion_servicio: e.target.value })}
-                required
-                placeholder="Ej: Administración de App de Gastos, Mantenimiento CRM..."
-                className="bg-slate-50 border-none px-4 py-2 rounded-xl"
-              />
-              <p className="text-[10px] text-slate-400 italic">Describí qué aplicación o servicio se administra para este cliente</p>
-            </div>
-          </div>
-
-          {/* SECCIÓN 3: LINKS Y ACCESOS */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b pb-1">3. Credenciales y Links</h3>
+        <form onSubmit={handleSubmit} className="space-y-6 pt-2 pb-0">
+          <div className="flex flex-col gap-6 max-h-[60vh] overflow-y-auto px-1 pr-2 pb-4 scrollbar-thin scrollbar-thumb-slate-200">
             
-            {/* Datalist para emails reutilizables */}
-            <datalist id="existing-emails">
-              {existingEmails.map(email => <option key={email} value={email} />)}
-            </datalist>
+            {/* BLOQUE A: DATOS DEL CLIENTE */}
+            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-slate-400" />
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">A. Datos del Cliente</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Nombre / Empresa</Label>
+                  <Input 
+                    id="cliente" 
+                    value={formData.cliente}
+                    onChange={(e) => handleInputChange('cliente', e.target.value)}
+                    required
+                    placeholder="Ej: PlayBook Inc..."
+                    className="bg-white border-slate-200 px-4 h-10 rounded-xl shadow-sm text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="telefono_cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Teléfono</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                    <Input 
+                      id="telefono_cliente" 
+                      value={formData.telefono_cliente}
+                      onChange={(e) => handleInputChange('telefono_cliente', e.target.value)}
+                      placeholder="+54 9..."
+                      className="bg-white border-slate-200 pl-9 h-10 rounded-xl shadow-sm text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
-              {/* Supabase */}
+            {/* BLOQUE B: SERVICIO Y COBRO */}
+            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-slate-400" />
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">B. Servicio y Cuota</h3>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="descripcion_servicio" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Descripción / Mantenimiento</Label>
+                  <Input 
+                    id="descripcion_servicio" 
+                    value={formData.descripcion_servicio}
+                    onChange={(e) => handleInputChange('descripcion_servicio', e.target.value)}
+                    required
+                    placeholder="Ej: Administración de App de Gastos..."
+                    className="bg-white border-slate-200 px-4 h-10 rounded-xl shadow-sm text-sm"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Monto Mensual</Label>
+                    <div className="flex gap-2">
+                      <Select 
+                        value={formData.moneda} 
+                        onValueChange={(v: 'ARS' | 'USD') => handleMonedaChange(v)}
+                      >
+                        <SelectTrigger className="w-24 bg-white border-slate-200 rounded-xl font-bold h-10 shadow-sm text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ARS">ARS</SelectItem>
+                          <SelectItem value="USD">USD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input 
+                        type="number" 
+                        value={formData.monto_mensual}
+                        onChange={(e) => handleMontoMensualChange(parseFloat(e.target.value) || 0)}
+                        required
+                        placeholder="0"
+                        className="bg-white border-slate-200 font-black text-slate-900 rounded-xl h-10 shadow-sm text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {formData.moneda === 'USD' ? (
+                    <div className="space-y-1.5 animation-fade-in">
+                      <Label className="text-[10px] font-bold text-blue-600 uppercase ml-1">Equivalente ARS</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.monto_mensual_ars}
+                        onChange={(e) => handleInputChange('monto_mensual_ars', parseFloat(e.target.value) || 0)}
+                        required
+                        placeholder="Monto en ARS..."
+                        className="bg-blue-50/50 border-blue-100 font-black text-blue-900 rounded-xl h-10 shadow-sm text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-end pb-1 ml-1">
+                      <p className="text-[10px] text-slate-400 italic">Vence día 10</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* BLOQUE C: IDENTIDAD */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Globe className="w-4 h-4 text-slate-400" />
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">C. Identidad Visual</h3>
+              </div>
+              <div className="flex gap-4 items-center">
+                <div className="w-16 h-16 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 group hover:border-blue-400 transition-all">
+                  {formData.logo_url ? (
+                    <img src={formData.logo_url} alt="Logo Preview" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
+                  ) : (
+                    <Users className="w-6 h-6 text-slate-200 group-hover:text-blue-200" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Logo URL (Cloudinary preferred)</Label>
+                  <Input 
+                    value={formData.logo_url}
+                    onChange={(e) => handleInputChange('logo_url', e.target.value)}
+                    placeholder="https://cloudinary.com/..."
+                    className="bg-slate-50 border-none px-4 h-10 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* BLOQUE D: ACCESOS TÉCNICOS */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-1 pl-1">
+                <Code className="w-4 h-4 text-slate-400" />
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">D. Accesos Técnicos</h3>
+              </div>
+              
+              <datalist id="existing-emails">
+                {existingEmails.map(email => <option key={email} value={email} />)}
+              </datalist>
+
               <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase">Supabase URL / Email</Label>
-                <div className="flex flex-col gap-1">
+                {/* Supabase Row */}
+                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
+                    <Database className="w-3.5 h-3.5 text-blue-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Supabase</span>
+                  </div>
                   <Input 
                     value={formData.supabase_url}
-                    onChange={(e) => setFormData({ ...formData, supabase_url: e.target.value })}
-                    placeholder="URL del proyecto..."
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    onChange={(e) => handleInputChange('supabase_url', e.target.value)}
+                    placeholder="URL Proyecto"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                   <Input 
                     value={formData.supabase_email}
-                    onChange={(e) => setFormData({ ...formData, supabase_email: e.target.value })}
-                    placeholder="Email de acceso..."
+                    onChange={(e) => handleInputChange('supabase_email', e.target.value)}
+                    placeholder="Email Acceso"
                     list="existing-emails"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                 </div>
-              </div>
 
-              {/* Cloudinary */}
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase">Cloudinary URL / Email</Label>
-                <div className="flex flex-col gap-1">
-                  <Input 
-                    value={formData.cloudinary_url}
-                    onChange={(e) => setFormData({ ...formData, cloudinary_url: e.target.value })}
-                    placeholder="URL Dashboard..."
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
-                  />
-                  <Input 
-                    value={formData.cloudinary_email}
-                    onChange={(e) => setFormData({ ...formData, cloudinary_email: e.target.value })}
-                    placeholder="Email de acceso..."
-                    list="existing-emails"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* GitHub */}
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase">GitHub Repo / Email</Label>
-                <div className="flex flex-col gap-1">
+                {/* GitHub Row */}
+                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
+                    <Github className="w-3.5 h-3.5 text-slate-900" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">GitHub</span>
+                  </div>
                   <Input 
                     value={formData.github_url}
-                    onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
-                    placeholder="Repositorio..."
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    onChange={(e) => handleInputChange('github_url', e.target.value)}
+                    placeholder="URL Repo"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                   <Input 
                     value={formData.github_email}
-                    onChange={(e) => setFormData({ ...formData, github_email: e.target.value })}
-                    placeholder="Cuenta GitHub asociada..."
+                    onChange={(e) => handleInputChange('github_email', e.target.value)}
+                    placeholder="Email/User"
                     list="existing-emails"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                 </div>
-              </div>
 
-              {/* AI Studio */}
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase">AI Studio / Email</Label>
-                <div className="flex flex-col gap-1">
+                {/* AI Studio Row */}
+                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">AI Studio</span>
+                  </div>
                   <Input 
                     value={formData.ai_studio_url}
-                    onChange={(e) => setFormData({ ...formData, ai_studio_url: e.target.value })}
-                    placeholder="URL Directa..."
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    onChange={(e) => handleInputChange('ai_studio_url', e.target.value)}
+                    placeholder="Prompt URL"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                   <Input 
                     value={formData.ai_studio_email}
-                    onChange={(e) => setFormData({ ...formData, ai_studio_email: e.target.value })}
-                    placeholder="Google account..."
+                    onChange={(e) => handleInputChange('ai_studio_email', e.target.value)}
+                    placeholder="Email Google"
                     list="existing-emails"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                 </div>
-              </div>
 
-              {/* VS Code */}
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase">Link VS Code / Email</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                {/* Cloudinary Row */}
+                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
+                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">Cloudinary</span>
+                  </div>
+                  <Input 
+                    value={formData.cloudinary_url}
+                    onChange={(e) => handleInputChange('cloudinary_url', e.target.value)}
+                    placeholder="Dashboard URL"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
+                  />
+                  <Input 
+                    value={formData.cloudinary_email}
+                    onChange={(e) => handleInputChange('cloudinary_email', e.target.value)}
+                    placeholder="Email Acceso"
+                    list="existing-emails"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
+                  />
+                </div>
+
+                {/* VS Code Row */}
+                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
+                    <Code className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">VS Code</span>
+                  </div>
                   <Input 
                     value={formData.vscode_url}
-                    onChange={(e) => setFormData({ ...formData, vscode_url: e.target.value })}
-                    placeholder="Link VS Code (vscode://...)"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    onChange={(e) => handleInputChange('vscode_url', e.target.value)}
+                    placeholder="vscode://..."
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                   <Input 
                     value={formData.vscode_email}
-                    onChange={(e) => setFormData({ ...formData, vscode_email: e.target.value })}
-                    placeholder="Email asociado..."
+                    onChange={(e) => handleInputChange('vscode_email', e.target.value)}
+                    placeholder="Email Asociado"
                     list="existing-emails"
-                    className="bg-slate-50 border-none px-3 py-1.5 rounded-lg text-xs"
+                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="vscode_info" className="text-xs font-bold text-slate-500 uppercase">Información Adicional (Comandos / Notas)</Label>
-              <Input 
-                id="vscode_info" 
-                value={formData.vscode_info}
-                onChange={(e) => setFormData({ ...formData, vscode_info: e.target.value })}
-                placeholder="Ruta local, comandos de inicio, notas..."
-                className="bg-slate-50 border-none px-4 py-2 rounded-xl"
-              />
+            {/* BLOQUE E: NOTAS INTERNAS */}
+            <div className="bg-slate-50/30 p-4 rounded-2xl border border-slate-100 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Info className="w-4 h-4 text-slate-400" />
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E. Notas e Información Local</h3>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="vscode_info" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Comandos / Notas</Label>
+                <Input 
+                  id="vscode_info" 
+                  value={formData.vscode_info}
+                  onChange={(e) => handleInputChange('vscode_info', e.target.value)}
+                  placeholder="Ruta local, comandos de inicio, notas..."
+                  className="bg-white border-slate-200 px-4 h-10 rounded-xl text-sm italic"
+                />
+              </div>
             </div>
           </div>
 
-          {/* SECCIÓN 4: COBRO Y VENCIMIENTO */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest border-b pb-1">4. Modelo de Cobro</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase">Cuota Mensual</Label>
-                <div className="flex gap-2">
-                  <Select 
-                    value={formData.moneda} 
-                    onValueChange={(v: 'ARS' | 'USD') => handleMonedaChange(v)}
-                  >
-                    <SelectTrigger className="w-24 bg-slate-100 border-none rounded-xl font-bold">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ARS">ARS</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input 
-                    type="number" 
-                    value={formData.monto_mensual}
-                    onChange={(e) => handleMontoMensualChange(parseFloat(e.target.value) || 0)}
-                    required
-                    placeholder="0.00"
-                    className="bg-slate-50 border-none font-bold text-slate-900 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {formData.moneda === 'USD' && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-blue-600 uppercase">Equivalente en ARS</Label>
-                  <Input 
-                    type="number" 
-                    value={formData.monto_mensual_ars}
-                    onChange={(e) => setFormData({ ...formData, monto_mensual_ars: parseFloat(e.target.value) || 0 })}
-                    required
-                    placeholder="Monto en ARS..."
-                    className="bg-blue-50 border-blue-100 font-bold text-blue-900 rounded-xl"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                <span className="text-xs font-bold text-amber-700">Vence automáticamente el día 10</span>
-              </div>
-              <span className="text-[10px] font-black text-amber-400 uppercase">Sistema automático</span>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-4 gap-2">
-            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">
+          <div className="pt-2 border-t mt-2 flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl font-bold text-slate-400">
               Cancelar
             </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-12 font-bold uppercase tracking-tight">
+            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-xl px-12 font-black uppercase tracking-tight shadow-xl shadow-slate-200">
               {incomeToEdit ? 'Guardar Cambios' : 'Registrar Cliente'}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

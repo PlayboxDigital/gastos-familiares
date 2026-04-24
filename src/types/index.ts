@@ -106,6 +106,7 @@ export interface Income {
   // Accesos
   supabase_url?: string;
   supabase_email?: string;
+  logo_url?: string;
   cloudinary_url?: string;
   cloudinary_email?: string;
   github_url?: string;

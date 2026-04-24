@@ -400,6 +400,33 @@ export default function App() {
     setIncomeToEdit(null);
   };
 
+  const handleImportClients = async (clients: IncomeInput[]) => {
+    const stats = { success: 0, skipped: 0, errors: [] as string[] };
+    
+    for (const client of clients) {
+      // Evitar duplicados por nombre de empresa o link de app
+      const isDuplicate = incomes.some(existing => 
+        existing.cliente.toLowerCase() === client.cliente.toLowerCase() ||
+        (client.project_url && existing.project_url === client.project_url)
+      );
+
+      if (isDuplicate) {
+        stats.skipped++;
+        continue;
+      }
+
+      try {
+        const created = await incomesService.crearIngreso(client);
+        setIncomes(prev => [created, ...prev]);
+        stats.success++;
+      } catch (err) {
+        stats.errors.push(`${client.cliente}: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+      }
+    }
+
+    return stats;
+  };
+
   const handleDeleteDebt = async (id: string) => {
     console.log("APP_DEBTS_DELETE_START_ID:", id);
     try {
@@ -760,6 +787,7 @@ export default function App() {
             expenses={expenses}
             onEdit={handleEditIncome}
             onDelete={handleDeleteIncome}
+            onImport={handleImportClients}
             searchTerm={incomeSearchTerm}
             onSearchChange={setIncomeSearchTerm}
           />
