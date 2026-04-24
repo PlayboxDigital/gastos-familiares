@@ -29,6 +29,7 @@ interface DashboardProps {
   expenses: Expense[];
   categories: CategoryConfig[];
   incomes?: Income[];
+  incomePayments?: IngresoPago[];
   debts?: Debt[];
   history?: GastoPagoHistorial[];
   onQuickPayExpense?: (expense: Expense) => void;
@@ -89,6 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   expenses = [],
   categories = [],
   incomes = [],
+  incomePayments = [],
   debts = [],
   history = [],
   onQuickPayExpense,
@@ -96,6 +98,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectIncome,
 }) => {
   const currentMonth = new Date();
+  const currentPeriod = format(currentMonth, 'yyyy-MM');
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -207,13 +210,46 @@ export const Dashboard: React.FC<DashboardProps> = ({
   [monthlyIncomes]);
 
   const availableEstimado = totalIncomes - totalMonthly;
+  const totalCobrado = useMemo(() => {
+    return incomePayments
+      .filter(p => p.periodo === currentPeriod && (p.estado === 'Pagado' || p.estado === 'Parcial'))
+      .reduce((sum, p) => sum + (p.monto_pagado || 0), 0);
+  }, [incomePayments, currentPeriod]);
 
-  const uniqueClientsCount = useMemo(() => 
-    new Set(monthlyIncomes.map(i => i.cliente)).size,
-  [monthlyIncomes]);
+  const activeIncomes = useMemo(() => {
+    return incomes.filter(i => {
+      const isStatusActive = (i.estado?.toLowerCase() || 'activo') === 'activo';
+      const hasMontoMensual = (i.monto_mensual || i.monto_mensual_ars || i.monto || 0) > 0;
+      return isStatusActive || (hasMontoMensual && !i.estado);
+    });
+  }, [incomes]);
+
+  const uniqueClientsCount = useMemo(() => activeIncomes.length, [activeIncomes]);
+
+  const pendingCollectionsCount = useMemo(() => {
+    if (!activeIncomes.length) return 0;
+    
+    return activeIncomes.filter(income => {
+      // Buscar pago para este cliente en el periodo actual
+      const payment = incomePayments.find(p => 
+        p.ingreso_id === income.id && 
+        p.periodo === currentPeriod
+      );
+      
+      // Si no hay pago -> pendiente
+      if (!payment) return true;
+      
+      // Si el pago no está Pagado -> pendiente
+      return payment.estado !== 'Pagado';
+    }).length;
+  }, [activeIncomes, incomePayments, currentPeriod]);
+
+  const pendingDebtsSum = useMemo(() => 
+    debts.filter(d => d.estado !== 'pagada').reduce((sum, d) => sum + (d.saldo_pendiente || 0), 0),
+  [debts]);
 
   const pendingDebtsCount = useMemo(() => 
-    debts.filter(d => d.estado !== 'Pagado').length,
+    debts.filter(d => d.estado !== 'pagada').length,
   [debts]);
 
   const pagosRealizados = useMemo(
@@ -432,9 +468,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <KPICard
           title="Cobranzas"
-          value={`$${totalIncomes.toLocaleString()}`}
+          value={`$${totalCobrado.toLocaleString()}`}
           icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
-          description="Ventas estimadas del mes"
+          description={`Ingresos cobrados ${currentMonthName}`}
           color="emerald"
         />
         <KPICard
@@ -488,9 +524,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         />
         <KPICard
           title="Deudas"
-          value={pendingDebtsCount.toString()}
-          icon={<CreditCard className="h-5 w-5 text-rose-500" />}
-          description="Deudas pendientes"
+          value={`$${pendingDebtsSum.toLocaleString()}`}
+          icon={<AlertTriangle className="h-5 w-5 text-rose-500" />}
+          description="Monto adeudado"
           compact
           color="rose"
           onClick={() => onTabChange?.('debts')}
@@ -928,41 +964,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KPICard
-          title="Esenciales"
-          value={pendingEssentialExpenses.length.toString()}
-          icon={<Zap className="h-4 w-4" />}
-          description="Sin saldar"
-          compact
-          color="rose"
-        />
-        <KPICard
-          title="Riesgo"
-          value={`$${riesgoFinanciero.toLocaleString()}`}
-          icon={<Flame className="h-4 w-4" />}
-          description="Total vencidos"
-          compact
-          color="orange"
-        />
-        <KPICard
-          title="Frecuencia"
-          value={monthlyExpenses.length.toString()}
-          icon={<Activity className="h-4 w-4" />}
-          description="Gastos registrados"
-          compact
-          color="indigo"
-        />
-        <KPICard
-          title="Pend. Hoy"
-          value={pagosPendientes.length.toString()}
-          icon={<ArrowUpRight className="h-4 w-4" />}
-          description="Gastos pendientes"
-          compact
-          color="amber"
-        />
       </div>
 
       <div className="grid grid-cols-1 pb-12">

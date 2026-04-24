@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Search, Edit2, Trash2, Filter, TrendingUp, Users, Calendar, DollarSign, 
-  ExternalLink, Github, Database, Globe, User, Code, Phone
+  ExternalLink, Github, Database, Globe, User, Code, Phone, CheckCircle2
 } from 'lucide-react';
-import { Income, Expense } from '../types';
+import { Income, Expense, IncomeInput } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -23,20 +23,18 @@ interface IncomeListProps {
   incomes: Income[];
   expenses: Expense[];
   onEdit: (income: Income) => void;
+  onDetail: (income: Income) => void;
   onDelete: (id: string) => void;
-  onImport: (clients: IncomeInput[]) => Promise<{ success: number; skipped: number; errors: string[] }>;
   searchTerm?: string;
   onSearchChange?: (val: string) => void;
 }
 
-import { ClientImporter } from './ClientImporter';
-
 export const IncomeList: React.FC<IncomeListProps> = ({ 
   incomes, 
   expenses, 
-  onEdit, 
+  onEdit,
+  onDetail,
   onDelete,
-  onImport,
   searchTerm: externalSearchTerm,
   onSearchChange
 }) => {
@@ -100,7 +98,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     return (
       <TooltipProvider>
         <Tooltip>
-          <TooltipTrigger asChild>
+          <TooltipTrigger>
             <div 
               className={`p-1.5 rounded-lg transition-all border ${url ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer' : 'opacity-30 border-transparent text-slate-300'}`}
               onClick={() => url && window.open(url, '_blank')}
@@ -118,7 +116,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     );
   };
 
-  const renderTable = (data: Income[], title: string, icon: React.ReactNode, emptyMsg: string) => (
+  const renderCardList = (data: Income[], title: string, icon: React.ReactNode, emptyMsg: string) => (
     <div className="space-y-4">
       <div className="flex items-center gap-2 px-2">
         <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
@@ -127,65 +125,159 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">{title} ({data.length})</h3>
       </div>
       
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
-        <Table>
+      <div className="grid grid-cols-1 gap-3">
+        {data.length > 0 ? (
+          data.map((income) => (
+            <motion.div
+              key={income.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3 active:scale-[0.98] transition-all"
+              onClick={() => onDetail(income)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">
+                    {income.logo_url ? (
+                      <img src={income.logo_url} alt={income.cliente} className="w-full h-full object-contain p-1.5" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-xs font-black text-slate-400">
+                        {income.cliente.substring(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col truncate">
+                    <span className="text-sm font-black text-slate-900 truncate">{income.cliente}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase truncate">{income.descripcion_servicio || income.concepto}</span>
+                  </div>
+                </div>
+                <div className={`p-1.5 rounded-full ${getStatusBadge(income.estado_pago)}`}>
+                  {income.estado_pago === 'Pagado' ? <CheckCircle2 className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-50 pt-3">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Monto mensual</span>
+                  <span className="text-sm font-black text-slate-900">
+                    {income.moneda === 'USD' ? `U$D ${income.monto_mensual}` : `$${(income.monto_mensual || income.monto_mensual_ars || income.monto_total || 0).toLocaleString()}`}
+                  </span>
+                </div>
+                <div className="flex flex-col text-right">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Vencimiento</span>
+                  <span className="text-sm font-black text-slate-900">Día {income.dia_vencimiento || 10}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <div className="flex items-center gap-1">
+                  {(() => {
+                    const dbType = income.db_type?.toLowerCase();
+                    const dbLink = (income.link_db || income.supabase_url || '').toLowerCase();
+                    const appLink = (income.link_app || income.project_url || '').toLowerCase();
+                    let label = "Sin sistema";
+                    if (dbType === 'google_sheets' || dbLink.includes('docs.google.com')) label = "Google Sheets";
+                    else if (dbType === 'appsheet' || appLink.includes('appsheet.com')) label = "AppSheet";
+                    else if (dbType === 'supabase' || dbLink.includes('supabase.com') || (income.supabase_url && !dbType)) label = "Supabase";
+                    
+                    return (
+                      <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                         <Database className="w-3 h-3 text-slate-400" />
+                         <span className="text-[9px] font-black text-slate-600 truncate max-w-[80px]">{label}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-400 hover:bg-slate-100" onClick={() => onEdit(income)}>
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(income.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <div className="py-12 bg-white rounded-3xl border border-dashed border-slate-200 text-center text-slate-400 text-sm">
+            {emptyMsg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderTable = (data: Income[], title: string, icon: React.ReactNode, emptyMsg: string) => (
+    <div className="hidden md:block space-y-4">
+      <div className="flex items-center gap-2 px-2">
+        <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+          {icon}
+        </div>
+        <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">{title} ({data.length})</h3>
+      </div>
+      
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <Table className="w-full table-fixed">
           <TableHeader className="bg-slate-50/50">
             <TableRow className="hover:bg-transparent border-slate-100">
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 px-6 shrink-0">Vence</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Cliente / Contacto</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">App / Servicio</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Monto Mensual</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Accesos</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5">Estado</TableHead>
-              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 text-right pr-6">Acciones</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 px-6 w-[80px]">Vence</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 w-[20%]">Cliente</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 w-[25%]">Servicio</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 w-[130px]">Monto</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 w-[160px]">Accesos</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 w-[90px]">Estado</TableHead>
+              <TableHead className="font-bold text-slate-500 uppercase text-[10px] tracking-widest py-5 text-right pr-6 w-[100px]">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <AnimatePresence>
               {data.map((income) => (
-                <motion.tr
-                   key={income.id}
-                   initial={{ opacity: 0 }}
-                   animate={{ opacity: 1 }}
-                   exit={{ opacity: 0 }}
-                   className="group hover:bg-slate-50/50 transition-colors border-slate-50"
-                >
+                  <motion.tr
+                    key={income.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="group hover:bg-slate-50/50 transition-colors border-slate-50 cursor-pointer"
+                    onClick={() => onDetail(income)}
+                  >
                   <TableCell className="py-4 px-6">
                     <div className="flex items-center gap-1.5 font-black text-slate-900">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       Día {income.dia_vencimiento || 10}
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 font-bold text-slate-700">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 border border-slate-200/50 shadow-sm">
+                  <TableCell className="py-4 font-bold text-slate-700 truncate overflow-hidden">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 border border-slate-200/50 shadow-sm">
                         {income.logo_url ? (
                           <img src={income.logo_url} alt={income.cliente} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
                         ) : (
-                          <span className="text-sm font-black text-slate-400">
+                          <span className="text-[10px] font-black text-slate-400">
                             {income.cliente.substring(0, 2).toUpperCase()}
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-col">
-                        <span className="flex items-center gap-1.5">
+                      <div className="flex flex-col truncate">
+                        <span className="truncate block font-black text-slate-900" title={income.cliente}>
                           {income.cliente}
                         </span>
                         {(income.telefono_cliente || income.cliente_contacto) && (
-                          <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
-                            <Phone className="w-2.5 h-2.5" />
+                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter flex items-center gap-1 truncate opacity-60">
                             {income.telefono_cliente || income.cliente_contacto}
                           </span>
                         )}
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 text-sm text-slate-600 font-medium">
-                    <div className="flex flex-col">
-                      <span>{income.descripcion_servicio || income.concepto}</span>
+                  <TableCell className="py-4 text-sm text-slate-600 font-medium truncate overflow-hidden">
+                    <div className="flex flex-col truncate">
+                      <span className="truncate block" title={income.descripcion_servicio || income.concepto}>
+                        {income.descripcion_servicio || income.concepto}
+                      </span>
                       {income.vscode_info && (
-                        <span className="text-[9px] text-blue-500 font-bold flex items-center gap-1 mt-1">
-                          <Code className="w-2.5 h-2.5" /> {income.vscode_info}
+                        <span className="text-[9px] text-blue-500 font-bold flex items-center gap-1 mt-1 truncate">
+                          <Code className="w-2.5 h-2.5 shrink-0" /> <span className="truncate">{income.vscode_info}</span>
                         </span>
                       )}
                     </div>
@@ -204,7 +296,29 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                   </TableCell>
                   <TableCell className="py-4">
                     <div className="flex items-center gap-1">
-                      <TechIndicator icon={<Database className="w-3.5 h-3.5" />} url={income.supabase_url} email={income.supabase_email} label="Supabase" />
+                      {(() => {
+                        const dbType = income.db_type?.toLowerCase();
+                        const dbLink = (income.link_db || income.supabase_url || '').toLowerCase();
+                        const appLink = (income.link_app || income.project_url || '').toLowerCase();
+
+                        let label = "Sin sistema";
+                        if (dbType === 'google_sheets' || dbLink.includes('docs.google.com')) {
+                          label = "Google Sheets";
+                        } else if (dbType === 'appsheet' || appLink.includes('appsheet.com')) {
+                          label = "AppSheet";
+                        } else if (dbType === 'supabase' || dbLink.includes('supabase.com') || (income.supabase_url && !dbType)) {
+                          label = "Supabase";
+                        }
+                        
+                        return (
+                          <TechIndicator 
+                            icon={<Database className="w-3.5 h-3.5" />} 
+                            url={income.link_db || income.supabase_url} 
+                            email={income.email_db || income.supabase_email} 
+                            label={label} 
+                          />
+                        );
+                      })()}
                       <TechIndicator icon={<Globe className="w-3.5 h-3.5" />} url={income.cloudinary_url} email={income.cloudinary_email} label="Cloudinary" />
                       <TechIndicator icon={<Github className="w-3.5 h-3.5" />} url={income.github_url} email={income.github_email} label="GitHub" />
                       <TechIndicator icon={<TrendingUp className="w-3.5 h-3.5" />} url={income.ai_studio_url} email={income.ai_studio_email} label="AI Studio" />
@@ -222,9 +336,12 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-lg"
-                        onClick={() => onEdit(income)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDetail(income);
+                        }}
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -318,7 +435,6 @@ export const IncomeList: React.FC<IncomeListProps> = ({
               className="pl-10 bg-slate-50 border-none rounded-xl"
             />
           </div>
-          <ClientImporter onImport={onImport} existingIncomes={incomes} />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <select 
@@ -334,20 +450,38 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         </div>
       </div>
 
-      {/* Tables Section */}
-      {renderTable(
-        pendingIncomes, 
-        "Cobranzas Pendientes", 
-        <Calendar className="w-4 h-4" />, 
-        "No hay cobros pendientes registrados"
-      )}
-      
-      {renderTable(
-        collectedIncomes, 
-        "Historial de Cobros", 
-        <TrendingUp className="w-4 h-4" />, 
-        "No se registran cobros finalizados aún"
-      )}
+      {/* Tables/Cards Section */}
+      <div className="md:hidden space-y-8">
+        {renderCardList(
+          pendingIncomes, 
+          "Cobranzas Pendientes", 
+          <Calendar className="w-4 h-4" />, 
+          "No hay cobros pendientes"
+        )}
+        
+        {renderCardList(
+          collectedIncomes, 
+          "Historial de Cobros", 
+          <TrendingUp className="w-4 h-4" />, 
+          "No se registran cobros finalizados"
+        )}
+      </div>
+
+      <div className="hidden md:block space-y-8">
+        {renderTable(
+          pendingIncomes, 
+          "Cobranzas Pendientes", 
+          <Calendar className="w-4 h-4" />, 
+          "No hay cobros pendientes registrados"
+        )}
+        
+        {renderTable(
+          collectedIncomes, 
+          "Historial de Cobros", 
+          <TrendingUp className="w-4 h-4" />, 
+          "No se registran cobros finalizados aún"
+        )}
+      </div>
     </div>
   );
 };

@@ -168,17 +168,19 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] rounded-2xl overflow-y-auto max-h-[90vh]">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-slate-900">
-            {incomeToEdit ? 'Editar Cliente' : 'Nuevo Cliente / Aplicación'}
-          </DialogTitle>
-          <DialogDescription>
-            Información técnica y comercial del servicio administrado.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 pt-2 pb-0">
-          <div className="flex flex-col gap-6 max-h-[60vh] overflow-y-auto px-1 pr-2 pb-4 scrollbar-thin scrollbar-thumb-slate-200">
+      <DialogContent className="w-full h-full sm:h-auto sm:max-w-[600px] sm:rounded-2xl overflow-y-auto p-0 flex flex-col gap-0 border-none sm:border">
+        <div className="p-4 md:p-6 border-b shrink-0 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900">
+              {incomeToEdit ? 'Editar Cliente' : 'Nuevo Cliente / Aplicación'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Información técnica y comercial del servicio administrado.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 modal-scroll pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-6">
             
             {/* BLOQUE A: DATOS DEL CLIENTE */}
             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 space-y-4">
@@ -187,27 +189,28 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">A. Datos del Cliente</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 text-left">
                   <Label htmlFor="cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Nombre / Empresa</Label>
                   <Input 
                     id="cliente" 
-                    value={formData.cliente}
+                    value={formData.cliente || ''}
                     onChange={(e) => handleInputChange('cliente', e.target.value)}
                     required
                     placeholder="Ej: PlayBook Inc..."
-                    className="bg-white border-slate-200 px-4 h-10 rounded-xl shadow-sm text-sm"
+                    className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 text-left">
                   <Label htmlFor="telefono_cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Teléfono</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
                     <Input 
                       id="telefono_cliente" 
-                      value={formData.telefono_cliente}
+                      type="tel"
+                      value={formData.telefono_cliente || ''}
                       onChange={(e) => handleInputChange('telefono_cliente', e.target.value)}
                       placeholder="+54 9..."
-                      className="bg-white border-slate-200 pl-9 h-10 rounded-xl shadow-sm text-sm"
+                      className="bg-white border-slate-200 pl-9 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
                     />
                   </div>
                 </div>
@@ -221,27 +224,27 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">B. Servicio y Cuota</h3>
               </div>
               <div className="space-y-4">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 text-left">
                   <Label htmlFor="descripcion_servicio" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Descripción / Mantenimiento</Label>
                   <Input 
                     id="descripcion_servicio" 
-                    value={formData.descripcion_servicio}
+                    value={formData.descripcion_servicio || ''}
                     onChange={(e) => handleInputChange('descripcion_servicio', e.target.value)}
                     required
                     placeholder="Ej: Administración de App de Gastos..."
-                    className="bg-white border-slate-200 px-4 h-10 rounded-xl shadow-sm text-sm"
+                    className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
                   />
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 text-left">
                     <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Monto Mensual</Label>
                     <div className="flex gap-2">
                       <Select 
-                        value={formData.moneda} 
+                        value={formData.moneda || 'ARS'} 
                         onValueChange={(v: 'ARS' | 'USD') => handleMonedaChange(v)}
                       >
-                        <SelectTrigger className="w-24 bg-white border-slate-200 rounded-xl font-bold h-10 shadow-sm text-sm">
+                        <SelectTrigger className="w-28 sm:w-24 bg-white border-slate-200 rounded-xl font-bold h-11 sm:h-10 shadow-sm text-sm shrink-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -251,25 +254,27 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                       </Select>
                       <Input 
                         type="number" 
-                        value={formData.monto_mensual}
+                        inputMode="decimal"
+                        value={formData.monto_mensual ?? 0}
                         onChange={(e) => handleMontoMensualChange(parseFloat(e.target.value) || 0)}
                         required
                         placeholder="0"
-                        className="bg-white border-slate-200 font-black text-slate-900 rounded-xl h-10 shadow-sm text-sm"
+                        className="bg-white border-slate-200 font-black text-slate-900 rounded-xl h-11 sm:h-10 shadow-sm text-sm"
                       />
                     </div>
                   </div>
 
                   {formData.moneda === 'USD' ? (
-                    <div className="space-y-1.5 animation-fade-in">
+                    <div className="space-y-1.5 animation-fade-in text-left">
                       <Label className="text-[10px] font-bold text-blue-600 uppercase ml-1">Equivalente ARS</Label>
                       <Input 
                         type="number" 
-                        value={formData.monto_mensual_ars}
+                        inputMode="decimal"
+                        value={formData.monto_mensual_ars ?? 0}
                         onChange={(e) => handleInputChange('monto_mensual_ars', parseFloat(e.target.value) || 0)}
                         required
                         placeholder="Monto en ARS..."
-                        className="bg-blue-50/50 border-blue-100 font-black text-blue-900 rounded-xl h-10 shadow-sm text-sm"
+                        className="bg-blue-50/50 border-blue-100 font-black text-blue-900 rounded-xl h-11 sm:h-10 shadow-sm text-sm"
                       />
                     </div>
                   ) : (
@@ -287,21 +292,21 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                 <Globe className="w-4 h-4 text-slate-400" />
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">C. Identidad Visual</h3>
               </div>
-              <div className="flex gap-4 items-center">
-                <div className="w-16 h-16 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 group hover:border-blue-400 transition-all">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 group hover:border-blue-400 transition-all">
                   {formData.logo_url ? (
                     <img src={formData.logo_url} alt="Logo Preview" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
                   ) : (
-                    <Users className="w-6 h-6 text-slate-200 group-hover:text-blue-200" />
+                    <Users className="w-8 h-8 sm:w-6 sm:h-6 text-slate-200 group-hover:text-blue-200" />
                   )}
                 </div>
-                <div className="flex-1 space-y-1.5">
+                <div className="flex-1 w-full space-y-1.5 text-left">
                   <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Logo URL (Cloudinary preferred)</Label>
                   <Input 
-                    value={formData.logo_url}
+                    value={formData.logo_url || ''}
                     onChange={(e) => handleInputChange('logo_url', e.target.value)}
                     placeholder="https://cloudinary.com/..."
-                    className="bg-slate-50 border-none px-4 h-10 rounded-xl text-xs"
+                    className="bg-slate-50 border-none px-4 h-11 sm:h-10 rounded-xl text-xs"
                   />
                 </div>
               </div>
@@ -319,110 +324,35 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
               </datalist>
 
               <div className="space-y-2">
-                {/* Supabase Row */}
-                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
-                    <Database className="w-3.5 h-3.5 text-blue-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase">Supabase</span>
+                {[
+                  { id: 'supabase', label: 'Supabase', icon: Database, color: 'text-blue-500', urlField: 'supabase_url', emailField: 'supabase_email' },
+                  { id: 'github', label: 'GitHub', icon: Github, color: 'text-slate-900', urlField: 'github_url', emailField: 'github_email' },
+                  { id: 'aistudio', label: 'AI Studio', icon: TrendingUp, color: 'text-orange-500', urlField: 'ai_studio_url', emailField: 'ai_studio_email' },
+                  { id: 'cloudinary', label: 'Cloudinary', icon: Globe, color: 'text-indigo-500', urlField: 'cloudinary_url', emailField: 'cloudinary_email' },
+                  { id: 'vscode', label: 'VS Code', icon: Code, color: 'text-blue-400', urlField: 'vscode_url', emailField: 'vscode_email' },
+                ].map((row) => (
+                  <div key={row.id} className="flex flex-col gap-2 p-3 sm:p-2 bg-slate-50/70 rounded-2xl sm:rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-2 w-full px-1">
+                      <row.icon className={`w-3.5 h-3.5 ${row.color}`} />
+                      <span className="text-[10px] font-black text-slate-500 uppercase">{row.label}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input 
+                        value={formData[row.urlField as keyof IncomeInput] || ''}
+                        onChange={(e) => handleInputChange(row.urlField as keyof IncomeInput, e.target.value)}
+                        placeholder="URL Proyecto"
+                        className="flex-1 bg-white border-slate-200 h-10 sm:h-8 text-[11px] rounded-xl sm:rounded-lg"
+                      />
+                      <Input 
+                        value={formData[row.emailField as keyof IncomeInput] || ''}
+                        onChange={(e) => handleInputChange(row.emailField as keyof IncomeInput, e.target.value)}
+                        placeholder="Email Acceso"
+                        list="existing-emails"
+                        className="flex-1 bg-white border-slate-200 h-10 sm:h-8 text-[11px] rounded-xl sm:rounded-lg"
+                      />
+                    </div>
                   </div>
-                  <Input 
-                    value={formData.supabase_url}
-                    onChange={(e) => handleInputChange('supabase_url', e.target.value)}
-                    placeholder="URL Proyecto"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                  <Input 
-                    value={formData.supabase_email}
-                    onChange={(e) => handleInputChange('supabase_email', e.target.value)}
-                    placeholder="Email Acceso"
-                    list="existing-emails"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                </div>
-
-                {/* GitHub Row */}
-                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
-                    <Github className="w-3.5 h-3.5 text-slate-900" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase">GitHub</span>
-                  </div>
-                  <Input 
-                    value={formData.github_url}
-                    onChange={(e) => handleInputChange('github_url', e.target.value)}
-                    placeholder="URL Repo"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                  <Input 
-                    value={formData.github_email}
-                    onChange={(e) => handleInputChange('github_email', e.target.value)}
-                    placeholder="Email/User"
-                    list="existing-emails"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                </div>
-
-                {/* AI Studio Row */}
-                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
-                    <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase">AI Studio</span>
-                  </div>
-                  <Input 
-                    value={formData.ai_studio_url}
-                    onChange={(e) => handleInputChange('ai_studio_url', e.target.value)}
-                    placeholder="Prompt URL"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                  <Input 
-                    value={formData.ai_studio_email}
-                    onChange={(e) => handleInputChange('ai_studio_email', e.target.value)}
-                    placeholder="Email Google"
-                    list="existing-emails"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                </div>
-
-                {/* Cloudinary Row */}
-                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
-                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase">Cloudinary</span>
-                  </div>
-                  <Input 
-                    value={formData.cloudinary_url}
-                    onChange={(e) => handleInputChange('cloudinary_url', e.target.value)}
-                    placeholder="Dashboard URL"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                  <Input 
-                    value={formData.cloudinary_email}
-                    onChange={(e) => handleInputChange('cloudinary_email', e.target.value)}
-                    placeholder="Email Acceso"
-                    list="existing-emails"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                </div>
-
-                {/* VS Code Row */}
-                <div className="flex flex-col md:flex-row gap-2 items-center bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 w-full md:w-32 px-2">
-                    <Code className="w-3.5 h-3.5 text-blue-400" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase">VS Code</span>
-                  </div>
-                  <Input 
-                    value={formData.vscode_url}
-                    onChange={(e) => handleInputChange('vscode_url', e.target.value)}
-                    placeholder="vscode://..."
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                  <Input 
-                    value={formData.vscode_email}
-                    onChange={(e) => handleInputChange('vscode_email', e.target.value)}
-                    placeholder="Email Asociado"
-                    list="existing-emails"
-                    className="flex-1 bg-white border-slate-200 h-8 text-[11px] rounded-lg"
-                  />
-                </div>
+                ))}
               </div>
             </div>
 
@@ -432,25 +362,25 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                 <Info className="w-4 h-4 text-slate-400" />
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E. Notas e Información Local</h3>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 text-left">
                 <Label htmlFor="vscode_info" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Comandos / Notas</Label>
                 <Input 
                   id="vscode_info" 
-                  value={formData.vscode_info}
+                  value={formData.vscode_info || ''}
                   onChange={(e) => handleInputChange('vscode_info', e.target.value)}
                   placeholder="Ruta local, comandos de inicio, notas..."
-                  className="bg-white border-slate-200 px-4 h-10 rounded-xl text-sm italic"
+                  className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl text-sm italic"
                 />
               </div>
             </div>
           </div>
 
-          <div className="pt-2 border-t mt-2 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl font-bold text-slate-400">
+          <div className="p-4 md:p-6 border-t shrink-0 flex items-center gap-3 bg-white pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6">
+            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl font-bold text-slate-400 flex-1 sm:flex-none">
               Cancelar
             </Button>
-            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-xl px-12 font-black uppercase tracking-tight shadow-xl shadow-slate-200">
-              {incomeToEdit ? 'Guardar Cambios' : 'Registrar Cliente'}
+            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-xl h-12 sm:h-10 px-8 flex-1 font-black uppercase tracking-tight shadow-xl shadow-slate-200">
+              {incomeToEdit ? 'Guardar' : 'Registrar'}
             </Button>
           </div>
         </form>

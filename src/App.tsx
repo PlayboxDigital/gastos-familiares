@@ -34,6 +34,7 @@ import { DebtList } from './components/DebtList';
 import { DebtForm } from './components/DebtForm';
 import { IncomeList } from './components/IncomeList';
 import { IncomeForm } from './components/IncomeForm';
+import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
 import {
   Plus,
@@ -87,6 +88,7 @@ export default function App() {
   const [globalHistory, setGlobalHistory] = useState<GastoPagoHistorial[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
+  const [incomePayments, setIncomePayments] = useState<IngresoPago[]>([]);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDebtFormOpen, setIsDebtFormOpen] = useState(false);
@@ -95,6 +97,7 @@ export default function App() {
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   const [debtToEdit, setDebtToEdit] = useState<Debt | null>(null);
   const [incomeToEdit, setIncomeToEdit] = useState<Income | null>(null);
+  const [selectedIncomeForDetail, setSelectedIncomeForDetail] = useState<Income | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
 
@@ -105,6 +108,7 @@ export default function App() {
     }
   }, [activeTab]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [updatingPaymentIds, setUpdatingPaymentIds] = useState<Set<string>>(new Set());
   const [hasLegacyData, setHasLegacyData] = useState(false);
 
@@ -225,6 +229,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         console.log("APP_GASTOS_1_ANTES_FETCH")
         console.log("COMPONENTE_QUE_LLAMA_GASTOS: src/App.tsx");
@@ -235,6 +240,7 @@ export default function App() {
           gastosPagosHistorialService.obtenerTodoElHistorial(),
           deudasService.obtenerDeudas(),
           incomesService.obtenerIngresos(),
+          incomesService.obtenerTodosLosPagos(),
         ]);
 
         const gastosResult = results[0];
@@ -242,6 +248,7 @@ export default function App() {
         const historialResult = results[2];
         const deudasResult = results[3];
         const ingresosResult = results[4];
+        const ingresosPagosResult = results[5];
 
         console.log("APP_FETCH_GASTOS_STATUS:", gastosResult.status);
         console.log("APP_FETCH_PRESUPUESTOS_STATUS:", presupuestosResult.status);
@@ -287,6 +294,14 @@ export default function App() {
           dbIncomes = ingresosResult.value;
         } else {
           console.error("APP_FETCH_INGRESOS_ERROR:", ingresosResult.reason);
+          setError(`No se pudieron cargar los ingresos/clientes: ${ingresosResult.reason instanceof Error ? ingresosResult.reason.message : 'Error desconocido'}`);
+        }
+
+        let dbIncomePayments: IngresoPago[] = [];
+        if (ingresosPagosResult.status === 'fulfilled') {
+          dbIncomePayments = ingresosPagosResult.value;
+        } else {
+          console.error("APP_FETCH_INGRESOS_PAGOS_ERROR:", ingresosPagosResult.reason);
         }
 
     console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
@@ -317,6 +332,7 @@ export default function App() {
         setGlobalHistory(dbHistory);
         setDebts(dbDebts);
         setIncomes(dbIncomes);
+        setIncomePayments(dbIncomePayments);
       } catch (e) {
         console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       } finally {
@@ -398,33 +414,6 @@ export default function App() {
       console.error('Error al procesar ingreso:', error);
     }
     setIncomeToEdit(null);
-  };
-
-  const handleImportClients = async (clients: IncomeInput[]) => {
-    const stats = { success: 0, skipped: 0, errors: [] as string[] };
-    
-    for (const client of clients) {
-      // Evitar duplicados por nombre de empresa o link de app
-      const isDuplicate = incomes.some(existing => 
-        existing.cliente.toLowerCase() === client.cliente.toLowerCase() ||
-        (client.project_url && existing.project_url === client.project_url)
-      );
-
-      if (isDuplicate) {
-        stats.skipped++;
-        continue;
-      }
-
-      try {
-        const created = await incomesService.crearIngreso(client);
-        setIncomes(prev => [created, ...prev]);
-        stats.success++;
-      } catch (err) {
-        stats.errors.push(`${client.cliente}: ${err instanceof Error ? err.message : 'Error desconocido'}`);
-      }
-    }
-
-    return stats;
   };
 
   const handleDeleteDebt = async (id: string) => {
@@ -737,6 +726,7 @@ export default function App() {
             expenses={expenses}
             categories={categories}
             incomes={incomes}
+            incomePayments={incomePayments}
             debts={debts}
             history={globalHistory}
             onQuickPayExpense={handleActionPayment}
@@ -786,8 +776,8 @@ export default function App() {
             incomes={incomes}
             expenses={expenses}
             onEdit={handleEditIncome}
+            onDetail={(income) => setSelectedIncomeForDetail(income)}
             onDelete={handleDeleteIncome}
-            onImport={handleImportClients}
             searchTerm={incomeSearchTerm}
             onSearchChange={setIncomeSearchTerm}
           />
@@ -902,13 +892,13 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="w-6 h-6" />
-            </Button>
-            <h2 className="text-lg font-bold text-slate-900 capitalize">
+      <main className="flex-1 flex flex-col min-h-[100dvh] overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="md:hidden w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <Home className="text-white w-5 h-5" />
+            </div>
+            <h2 className="text-base md:text-lg font-bold text-slate-900 capitalize truncate">
               {activeTab === 'dashboard'
                 ? 'Panel de Control'
                 : activeTab === 'history'
@@ -959,7 +949,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-7xl mx-auto">
             {hasLegacyData && (
               <motion.div
@@ -1008,6 +998,28 @@ export default function App() {
               </motion.div>
             )}
 
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600"
+              >
+                <Bell className="w-5 h-5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold">Error de sincronización</p>
+                  <p className="text-xs opacity-90">{error}</p>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => window.location.reload()}
+                  className="hover:bg-red-100 text-red-700 font-bold"
+                >
+                  Reintentar
+                </Button>
+              </motion.div>
+            )}
+
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-64 space-y-4">
                 <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -1022,10 +1034,15 @@ export default function App() {
                     expenses={expenses}
                     categories={categories}
                     incomes={incomes}
+                    incomePayments={incomePayments}
                     debts={debts}
                     history={globalHistory}
                     onQuickPayExpense={handleActionPayment}
                     onTabChange={setActiveTab}
+                    onSelectIncome={(name) => {
+                      setIncomeSearchTerm(name);
+                      setActiveTab('incomes');
+                    }}
                   />
                 ) : (
                   <AnimatePresence mode="wait">
@@ -1047,41 +1064,36 @@ export default function App() {
         </div>
       </main>
 
-      <nav className="md:hidden bg-white border-t border-slate-200 px-6 py-3 flex justify-around items-center sticky bottom-0 z-10">
+      <nav className="md:hidden bg-white border-t border-slate-200 px-2 py-2 flex justify-between items-center sticky bottom-0 z-30">
         <MobileNavLink
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}
-          icon={<LayoutDashboard className="w-6 h-6" />}
+          icon={<LayoutDashboard className="w-5 h-5" />}
+          label="Inicio"
         />
         <MobileNavLink
           active={activeTab === 'monthly-status'}
           onClick={() => setActiveTab('monthly-status')}
-          icon={<Activity className="w-6 h-6" />}
+          icon={<Activity className="w-5 h-5" />}
+          label="Mes"
         />
         <MobileNavLink
           active={activeTab === 'incomes'}
           onClick={() => setActiveTab('incomes')}
-          icon={<TrendingUp className="w-6 h-6" />}
-        />
-        <MobileNavLink
-          active={activeTab === 'autos'}
-          onClick={() => setActiveTab('autos')}
-          icon={<Car className="w-6 h-6" />}
+          icon={<TrendingUp className="w-5 h-5" />}
+          label="Clientes"
         />
         <MobileNavLink
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
-          icon={<HistoryIcon className="w-6 h-6" />}
-        />
-        <MobileNavLink
-          active={activeTab === 'debts'}
-          onClick={() => setActiveTab('debts')}
-          icon={<CreditCard className="w-6 h-6" />}
+          icon={<HistoryIcon className="w-5 h-5" />}
+          label="Histor."
         />
         <MobileNavLink
           active={activeTab === 'settings'}
           onClick={() => setActiveTab('settings')}
-          icon={<SettingsIcon className="w-6 h-6" />}
+          icon={<SettingsIcon className="w-5 h-5" />}
+          label="Config"
         />
       </nav>
 
@@ -1128,6 +1140,19 @@ export default function App() {
         incomeToEdit={incomeToEdit}
         incomes={incomes}
       />
+      <AnimatePresence>
+        {selectedIncomeForDetail && (
+          <ClientDetail 
+            income={selectedIncomeForDetail}
+            isOpen={!!selectedIncomeForDetail}
+            onClose={() => setSelectedIncomeForDetail(null)}
+            onEdit={(income) => {
+              setSelectedIncomeForDetail(null);
+              handleEditIncome(income);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1157,17 +1182,22 @@ const MobileNavLink = ({
   active,
   onClick,
   icon,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
+  label: string;
 }) => (
   <button
     onClick={onClick}
-    className={`p-2 rounded-xl transition-colors ${
-      active ? 'text-blue-600 bg-blue-50' : 'text-slate-400'
+    className={`flex flex-col items-center gap-1 flex-1 py-1 transition-colors ${
+      active ? 'text-blue-600' : 'text-slate-400'
     }`}
   >
-    {icon}
+    <div className={`p-1.5 rounded-lg ${active ? 'bg-blue-50' : ''}`}>
+      {icon}
+    </div>
+    <span className="text-[10px] font-bold">{label}</span>
   </button>
 );

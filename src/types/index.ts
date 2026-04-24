@@ -122,10 +122,26 @@ export interface Income {
   moneda?: 'ARS' | 'USD';
   monto_mensual_ars?: number;
   dia_vencimiento?: number;
+  precio_original?: number;
+  bonificado?: boolean;
+  deuda_actual?: number;
+  ref_dolar?: number;
 
   // Compatibilidad / Otros
   cliente_contacto?: string;
+  nombre_contacto?: string;
   cliente_enlace?: string;
+  project_url?: string;
+  link_app?: string;
+  link_editor?: string;
+  email_editor?: string;
+  link_db?: string;
+  email_db?: string;
+  db_type?: string;
+  server_image?: string;
+  url_server_image?: string;
+  correo_image?: string;
+  estado?: 'activo' | 'inactivo' | 'finalizado';
   concepto: string;
   monto_total: number;
   monto_cobrado: number;
@@ -165,3 +181,19 @@ export interface AutoMovimiento {
 
 export type AutoInput = Omit<Auto, 'id' | 'created_at'>;
 export type AutoMovimientoInput = Omit<AutoMovimiento, 'id' | 'created_at'>;
+
+export interface IngresoPago {
+  id: string;
+  ingreso_id: string;
+  cliente: string;
+  periodo: string; // YYYY-MM
+  monto: number;
+  monto_pagado: number;
+  fecha_pago: string;
+  estado: PaymentStatus;
+  observacion?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type IngresoPagoInput = Omit<IngresoPago, 'id' | 'created_at' | 'updated_at'>;

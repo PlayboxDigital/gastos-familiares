@@ -702,7 +702,68 @@ export function PaymentHistory({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <Table>
+                        <div className="md:hidden divide-y divide-slate-100">
+                          {group.items.map((h) => (
+                            <motion.div
+                              key={h.id}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="p-4 space-y-3"
+                              onClick={() => {
+                                if (h.originalExpense) {
+                                  onShowHistory(h.originalExpense);
+                                }
+                              }}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-1 overflow-hidden">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-900">
+                                      {formatSafeDate(h.fecha_pago, "dd/MM/yyyy")}
+                                    </span>
+                                    <Badge variant="outline" className="text-[8px] font-bold px-1.5 py-0 border-slate-200 text-slate-500 uppercase truncate">
+                                      {h.categoria_snapshot}
+                                    </Badge>
+                                  </div>
+                                  <h4 className="text-sm font-black text-slate-900 line-clamp-1">
+                                    {h.subcategoria_snapshot || h.servicio_clave}
+                                  </h4>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-sm font-black text-slate-900">${h.monto_pagado.toLocaleString()}</span>
+                                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{h.forma_pago}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-50">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1 truncate">
+                                    <User className="w-2.5 h-2.5" /> {h.responsable_snapshot}
+                                  </span>
+                                  {h.archived && (
+                                    <Badge className="bg-rose-100 text-rose-700 border-none text-[8px] font-black px-1.5 h-4 shrink-0">
+                                      Archivado
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                  {h.originalExpense && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400" onClick={() => onEdit(h.originalExpense!)}>
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                  {h.sourceType === 'payment' && onDeletePayment && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-300 hover:text-red-500" onClick={() => onDeletePayment(h.id)}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+
+                        <div className="hidden md:block">
+                          <Table>
                           <TableHeader className="bg-slate-50">
                             <TableRow>
                               <TableHead
@@ -918,9 +979,10 @@ export function PaymentHistory({
                             ))}
                           </TableBody>
                         </Table>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 </motion.div>
               );
             })

@@ -146,8 +146,39 @@
     }
   body {
     @apply bg-background text-foreground;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     }
   html {
     @apply font-sans;
+    width: 100%;
+    overflow-x: hidden;
+    height: 100%;
     }
+  #root {
+    width: 100%;
+    overflow-x: hidden;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Chrome, Safari, Edge, Opera - Remove spin buttons */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox - Remove spin buttons */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Smooth scrolling for inner modals */
+.modal-scroll {
+  -webkit-overflow-scrolling: touch;
 }
