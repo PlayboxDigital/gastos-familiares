@@ -52,9 +52,19 @@ import {
   TrendingUp,
   Activity,
   Car,
+  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { startOfMonth, parseISO } from 'date-fns';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 type ExpenseWithCredit = Expense & {
   saldo_a_favor_aplicado?: number;
@@ -117,6 +127,40 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
+  // Estados para diálogos de confirmación (Prompt 126)
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+    variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirmar',
+    onConfirm: () => {},
+  });
+
+  const [deleteChoiceConfig, setDeleteChoiceConfig] = useState<{
+    isOpen: boolean;
+    expenseId: string;
+    hasDuplicate: boolean;
+    duplicateName: string;
+    paymentsCount: number;
+    onDeleteAll: () => void;
+    onMerge: () => void;
+  }>({
+    isOpen: false,
+    expenseId: '',
+    hasDuplicate: false,
+    duplicateName: '',
+    paymentsCount: 0,
+    onDeleteAll: () => {},
+    onMerge: () => {},
+  });
+
   useEffect(() => {
     const saved = localStorage.getItem('getagasto_expenses');
     if (saved) {
@@ -131,10 +175,42 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    console.log("APP_GASTOS_4_ESTADO_GASTOS:", expenses);
-    console.log("APP_GASTOS_4_ROWS:", Array.isArray(expenses) ? expenses.length : null);
-  }, [expenses]);
+  const fetchData = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      console.log("APP_GASTOS_1_ANTES_FETCH")
+      console.log("COMPONENTE_QUE_LLAMA_GASTOS: src/App.tsx");
+      
+      const [
+        gastos,
+        presupuestos,
+        historial,
+        deudas,
+        ingresos,
+        ingresosPagos
+      ] = await Promise.all([
+        gastosService.obtenerGastos(),
+        presupuestosService.obtenerPresupuestos(),
+        gastosPagosHistorialService.obtenerTodoElHistorial(),
+        deudasService.obtenerDeudas(),
+        incomesService.obtenerIngresos(),
+        incomesService.obtenerTodosLosPagos(),
+      ]);
+
+      setExpenses(gastos);
+      setCategories(presupuestos.length > 0 ? presupuestos : CATEGORIES);
+      setGlobalHistory(historial);
+      setDebts(deudas);
+      setIncomes(ingresos);
+      setIncomePayments(ingresosPagos);
+    } catch (e: any) {
+      console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
+      setError(`Error al cargar datos: ${e.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const handleMigrateData = async () => {
     const saved = localStorage.getItem('getagasto_expenses');
@@ -176,7 +252,7 @@ export default function App() {
             prioridad: exp.prioridad || exp.priority || 'Importante',
             tipo: exp.tipo || exp.type || 'Variable',
             concepto: exp.concepto || exp.description || '',
-            estado_pago: exp.estado_pago || 'Pendiente',
+            estado_pago: exp.estado_pago || 'Pendiente' as PaymentStatus,
             fecha_pago:
               (exp.estado_pago || 'Pendiente') === 'Pendiente'
                 ? null
@@ -203,7 +279,6 @@ export default function App() {
 
         if (migratedCount > 0 || duplicateCount > 0) {
           const nextVal = [...newExpenses, ...expenses];
-          console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLEMIGRATEDATA:", nextVal);
           setExpenses(nextVal);
           localStorage.removeItem('getagasto_expenses');
           localStorage.removeItem('getagasto_categories');
@@ -228,121 +303,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        console.log("APP_GASTOS_1_ANTES_FETCH")
-        console.log("COMPONENTE_QUE_LLAMA_GASTOS: src/App.tsx");
-        
-        const results = await Promise.allSettled([
-          gastosService.obtenerGastos(),
-          presupuestosService.obtenerPresupuestos(),
-          gastosPagosHistorialService.obtenerTodoElHistorial(),
-          deudasService.obtenerDeudas(),
-          incomesService.obtenerIngresos(),
-          incomesService.obtenerTodosLosPagos(),
-        ]);
-
-        const gastosResult = results[0];
-        const presupuestosResult = results[1];
-        const historialResult = results[2];
-        const deudasResult = results[3];
-        const ingresosResult = results[4];
-        const ingresosPagosResult = results[5];
-
-        console.log("APP_FETCH_GASTOS_STATUS:", gastosResult.status);
-        console.log("APP_FETCH_PRESUPUESTOS_STATUS:", presupuestosResult.status);
-        console.log("APP_FETCH_HISTORIAL_STATUS:", historialResult.status);
-        console.log("APP_FETCH_DEUDAS_STATUS:", deudasResult.status);
-        console.log("APP_FETCH_INGRESOS_STATUS:", ingresosResult.status);
-
-        // Procesar Gastos (Crítico)
-        let dbExpenses: Expense[] = [];
-        if (gastosResult.status === 'fulfilled') {
-          dbExpenses = gastosResult.value;
-        } else {
-          console.error("APP_FETCH_GASTOS_ERROR:", gastosResult.reason);
-        }
-
-        // Procesar Presupuestos (Fallback a CATEGORIES si falla)
-        let dbCategories: CategoryConfig[] = [];
-        if (presupuestosResult.status === 'fulfilled') {
-          dbCategories = presupuestosResult.value;
-        } else {
-          console.error("APP_FETCH_PRESUPUESTOS_ERROR:", presupuestosResult.reason);
-        }
-
-        // Procesar Historial (Fallback a [] si falla)
-        let dbHistory: GastoPagoHistorial[] = [];
-        if (historialResult.status === 'fulfilled') {
-          dbHistory = historialResult.value;
-        } else {
-          console.error("APP_FETCH_HISTORIAL_ERROR:", historialResult.reason);
-        }
-
-        // Procesar Deudas (Fallback a [] si falla)
-        let dbDebts: Debt[] = [];
-        if (deudasResult.status === 'fulfilled') {
-          dbDebts = deudasResult.value;
-        } else {
-          console.error("APP_FETCH_DEUDAS_ERROR:", deudasResult.reason);
-        }
-
-        // Procesar Ingresos (Fallback a [] si falla)
-        let dbIncomes: Income[] = [];
-        if (ingresosResult.status === 'fulfilled') {
-          dbIncomes = ingresosResult.value;
-        } else {
-          console.error("APP_FETCH_INGRESOS_ERROR:", ingresosResult.reason);
-          setError(`No se pudieron cargar los ingresos/clientes: ${ingresosResult.reason instanceof Error ? ingresosResult.reason.message : 'Error desconocido'}`);
-        }
-
-        let dbIncomePayments: IngresoPago[] = [];
-        if (ingresosPagosResult.status === 'fulfilled') {
-          dbIncomePayments = ingresosPagosResult.value;
-        } else {
-          console.error("APP_FETCH_INGRESOS_PAGOS_ERROR:", ingresosPagosResult.reason);
-        }
-
-    console.log("APP_GASTOS_2_RESPUESTA_SERVICIO:", dbExpenses);
-    if (dbExpenses.length > 0) {
-      console.log("APP_GASTOS_SCHEMA_KEYS:", Object.keys(dbExpenses[0]));
-    }
-    console.log("APP_GASTOS_2_ROWS:", Array.isArray(dbExpenses) ? dbExpenses.length : null);
-
-        console.log("APP_GASTOS_3_ANTES_SETSTATE:", dbExpenses);
-
-        console.log("APP_GASTOS_3A_SETSTATE_INICIO")
-        setExpenses((prev) => {
-        console.log("APP_GASTOS_3B_PREV_STATE_COUNT:", prev.length);
-        console.log("APP_GASTOS_3C_NEW_STATE_COUNT:", dbExpenses.length);
-        
-        // Log de Relecura Detallado (Prompt 081)
-        dbExpenses.forEach(exp => {
-          if (exp.id) {
-            console.log(`RELOAD_GASTO_ID: ${exp.id}, RELOAD_DIA_VENCIMIENTO_LEIDO: ${exp.dia_vencimiento}`);
-          }
-        });
-
-        return dbExpenses;
-        })
-        console.log("APP_GASTOS_3D_SETSTATE_EJECUTADO")
-
-        setCategories(dbCategories.length > 0 ? dbCategories : CATEGORIES);
-        setGlobalHistory(dbHistory);
-        setDebts(dbDebts);
-        setIncomes(dbIncomes);
-        setIncomePayments(dbIncomePayments);
-      } catch (e) {
-        console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const handleAddExpense = async (newExpense: Omit<Expense, 'id'> & { id?: string }) => {
     console.log("APP_HANDLEADDEXPENSE_INIT:", newExpense.id || 'NEW');
@@ -555,6 +517,75 @@ export default function App() {
     }
   };
 
+  const handleDeleteExpenseAll = async (id: string) => {
+    const associatedPayments = globalHistory.filter(h => h.gasto_id === id);
+    try {
+      setIsLoading(true);
+      // Eliminar pagos asociados
+      for (const payment of associatedPayments) {
+        await gastosPagosHistorialService.eliminarPagoHistorial(payment.id);
+      }
+      await gastosService.eliminarGasto(id);
+      
+      setExpenses(prev => prev.filter(e => e.id !== id));
+      const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
+      setGlobalHistory(updatedHistory);
+      // alert('Gasto e historial eliminados correctamente.');
+    } catch (error) {
+      console.error('Error al eliminar con dependencias:', error);
+      alert('Error al intentar eliminar registros asociados.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteExpenseMerge = async (id: string) => {
+    const expense = expenses.find(e => e.id === id);
+    if (!expense) return;
+    const expenseDate = parseISO(expense.fecha);
+    const monthKey = `${expense.categoria}|${expense.subcategoria}|${startOfMonth(expenseDate).getTime()}`;
+    const duplicate = expenses.find(e => {
+        if (e.id === id) return false;
+        const d = parseISO(e.fecha);
+        const k = `${e.categoria}|${e.subcategoria}|${startOfMonth(d).getTime()}`;
+        return k === monthKey;
+    });
+    if (!duplicate) return;
+    const associatedPayments = globalHistory.filter(h => h.gasto_id === id);
+
+    try {
+      setIsLoading(true);
+      // Fusionar: traspasar pagos al duplicado
+      await gastosPagosHistorialService.actualizarGastoIdEnPagos(id, duplicate.id);
+      
+      // Recalcular el total_abonado del gasto destino
+      const totalTraspasado = associatedPayments.reduce((sum, p) => sum + p.monto_pagado, 0);
+      const newTotalAbonado = (duplicate.total_abonado || 0) + totalTraspasado;
+      
+      await gastosService.actualizarGasto(duplicate.id, {
+        total_abonado: newTotalAbonado,
+        estado_pago: getEstadoPagoReal(duplicate as ExpenseWithCredit, newTotalAbonado)
+      });
+      
+      // Eliminar el gasto ahora orfano
+      await gastosService.eliminarGasto(id);
+      
+      // Refrescar datos
+      const [newExpenses, newHistory] = await Promise.all([
+        gastosService.obtenerGastos(),
+        gastosPagosHistorialService.obtenerTodoElHistorial()
+      ]);
+      setExpenses(newExpenses);
+      setGlobalHistory(newHistory);
+      // alert('Fusión exitosa. Los pagos han sido traspasados.');
+    } catch (error) {
+      console.error('Error durante la fusión:', error);
+      alert('La fusión falló. Revisa la consola para más detalles.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteExpense = async (id: string) => {
     const expense = expenses.find(e => e.id === id);
     if (!expense) return;
@@ -573,121 +604,74 @@ export default function App() {
     const associatedPayments = globalHistory.filter(h => h.gasto_id === id);
     
     if (associatedPayments.length > 0) {
-      let choice = "";
-      if (duplicate) {
-        choice = window.prompt(
-          `Este gasto tiene ${associatedPayments.length} pagos registrados y parece ser un DUPLICADO de "${duplicate.subcategoria}" (${duplicate.fecha}).\n\n` +
-          `¿Qué deseas hacer?\n` +
-          `1. Eliminar TODO (gasto y sus pagos)\n` +
-          `2. FUSIONAR (traspasar sus pagos al otro gasto y borrar este)\n` +
-          `Escribe 1 o 2 para confirmar, o cancela.`
-        ) || "";
-      } else {
-        const confirmDeleteAll = window.confirm(
-          `Este gasto tiene ${associatedPayments.length} pagos asociados.\n` +
-          `No se puede eliminar un gasto con historial sin borrar también sus pagos.\n\n` +
-          `¿Deseas eliminar el gasto y TODO su historial de pagos?`
-        );
-        if (confirmDeleteAll) choice = "1";
-      }
-
-      if (choice === "1") {
-        try {
-          setIsLoading(true);
-          // Eliminar pagos asociados
-          for (const payment of associatedPayments) {
-            await gastosPagosHistorialService.eliminarPagoHistorial(payment.id);
-          }
-          await gastosService.eliminarGasto(id);
-          
-          setExpenses(prev => prev.filter(e => e.id !== id));
-          const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
-          setGlobalHistory(updatedHistory);
-          alert('Gasto e historial eliminados correctamente.');
-        } catch (error) {
-          console.error('Error al eliminar con dependencias:', error);
-          alert('Error al intentar eliminar registros asociados.');
-        } finally {
-          setIsLoading(false);
-        }
-      } else if (choice === "2" && duplicate) {
-        try {
-          setIsLoading(true);
-          // Fusionar: traspasar pagos al duplicado
-          await gastosPagosHistorialService.actualizarGastoIdEnPagos(id, duplicate.id);
-          
-          // Recalcular el total_abonado del gasto destino
-          const totalTraspasado = associatedPayments.reduce((sum, p) => sum + p.monto_pagado, 0);
-          const newTotalAbonado = (duplicate.total_abonado || 0) + totalTraspasado;
-          
-          await gastosService.actualizarGasto(duplicate.id, {
-            total_abonado: newTotalAbonado,
-            estado_pago: getEstadoPagoReal(duplicate as ExpenseWithCredit, newTotalAbonado)
-          });
-          
-          // Eliminar el gasto ahora orfano
-          await gastosService.eliminarGasto(id);
-          
-          // Refrescar datos
-          const [newExpenses, newHistory] = await Promise.all([
-            gastosService.obtenerGastos(),
-            gastosPagosHistorialService.obtenerTodoElHistorial()
-          ]);
-          setExpenses(newExpenses);
-          setGlobalHistory(newHistory);
-          alert('Fusión exitosa. Los pagos han sido traspasados.');
-        } catch (error) {
-          console.error('Error durante la fusión:', error);
-          alert('La fusión falló. Revisa la consola para más detalles.');
-        } finally {
-          setIsLoading(false);
-        }
-      }
+      setDeleteChoiceConfig({
+        isOpen: true,
+        expenseId: id,
+        hasDuplicate: !!duplicate,
+        duplicateName: duplicate ? `${duplicate.subcategoria} (${duplicate.fecha})` : '',
+        paymentsCount: associatedPayments.length,
+        onDeleteAll: () => handleDeleteExpenseAll(id),
+        onMerge: () => handleDeleteExpenseMerge(id),
+      });
       return;
     }
 
     // Caso estándar sin pagos
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este gasto permanentemente?')) return;
-    
-    try {
-      await gastosService.eliminarGasto(id);
-      setExpenses(prev => prev.filter(e => e.id !== id));
-    } catch (error) {
-      console.error('Error al eliminar gasto:', error);
-      alert('Este gasto no se puede eliminar. Posiblemente tenga pagos asociados que no se cargaron correctamente.');
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Eliminar gasto',
+      description: '¿Estás seguro de que deseas eliminar este gasto permanentemente?',
+      confirmLabel: 'Eliminar',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await gastosService.eliminarGasto(id);
+          setExpenses(prev => prev.filter(e => e.id !== id));
+        } catch (error) {
+          console.error('Error al eliminar gasto:', error);
+          alert('Este gasto no se puede eliminar. Posiblemente tenga pagos asociados que no se cargaron correctamente.');
+        }
+      }
+    });
   };
 
   const handleDeleteHistoryPayment = async (pagoId: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se verá afectado.')) return;
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Eliminar registro de pago',
+      description: '¿Estás seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se verá afectado.',
+      confirmLabel: 'Eliminar',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          const pago = globalHistory.find(h => h.id === pagoId);
+          if (!pago) return;
 
-    try {
-      const pago = globalHistory.find(h => h.id === pagoId);
-      if (!pago) return;
+          const gastoId = pago.gasto_id;
+          const originalExpense = expenses.find(e => e.id === gastoId);
 
-      const gastoId = pago.gasto_id;
-      const originalExpense = expenses.find(e => e.id === gastoId);
+          await gastosPagosHistorialService.eliminarPagoHistorial(pagoId);
 
-      await gastosPagosHistorialService.eliminarPagoHistorial(pagoId);
+          // Si el pago estaba asociado a un gasto, hay que restar el monto del total_abonado del gasto
+          if (originalExpense) {
+            const newTotalAbonado = Math.max(0, (originalExpense.total_abonado || 0) - pago.monto_pagado);
+            const updateData = {
+              total_abonado: newTotalAbonado,
+              estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, newTotalAbonado)
+            };
+            
+            await gastosService.actualizarGasto(gastoId, updateData as any);
+            setExpenses(prev => prev.map(e => e.id === gastoId ? { ...e, ...updateData } : e));
+          }
 
-      // Si el pago estaba asociado a un gasto, hay que restar el monto del total_abonado del gasto
-      if (originalExpense) {
-        const newTotalAbonado = Math.max(0, (originalExpense.total_abonado || 0) - pago.monto_pagado);
-        const updateData = {
-          total_abonado: newTotalAbonado,
-          estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, newTotalAbonado)
-        };
-        
-        await gastosService.actualizarGasto(gastoId, updateData as any);
-        setExpenses(prev => prev.map(e => e.id === gastoId ? { ...e, ...updateData } : e));
+          const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
+          setGlobalHistory(updatedHistory);
+        } catch (error) {
+          console.error('Error al eliminar pago del historial:', error);
+          alert('No se pudo eliminar el pago del historial.');
+        }
       }
-
-      const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
-      setGlobalHistory(updatedHistory);
-    } catch (error) {
-      console.error('Error al eliminar pago del historial:', error);
-      alert('No se pudo eliminar el pago del historial.');
-    }
+    });
   };
 
   const handleUpdateLimit = async (categoryName: string, limit: number) => {
@@ -975,15 +959,18 @@ export default function App() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      if (
-                        confirm(
-                          '¿Estás seguro de que deseas descartar los datos antiguos? Esta acción no se puede deshacer.'
-                        )
-                      ) {
-                        localStorage.removeItem('getagasto_expenses');
-                        localStorage.removeItem('getagasto_categories');
-                        setHasLegacyData(false);
-                      }
+                      setConfirmConfig({
+                        isOpen: true,
+                        title: 'Descartar datos antiguos',
+                        description: '¿Estás seguro de que deseas descartar los datos antiguos? Esta acción no se puede deshacer.',
+                        confirmLabel: 'Descartar',
+                        variant: 'destructive',
+                        onConfirm: () => {
+                          localStorage.removeItem('getagasto_expenses');
+                          localStorage.removeItem('getagasto_categories');
+                          setHasLegacyData(false);
+                        }
+                      });
                     }}
                     className="text-amber-700 hover:bg-amber-100 flex-1 sm:flex-none"
                   >
@@ -1152,9 +1139,120 @@ export default function App() {
               setSelectedIncomeForDetail(null);
               handleEditIncome(income);
             }}
+            onRefresh={fetchData}
           />
         )}
       </AnimatePresence>
+
+      {/* Diálogo de Confirmación Genérico */}
+      <Dialog 
+        open={confirmConfig.isOpen} 
+        onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent className="max-w-[400px] rounded-[2rem] p-8 z-[9999]">
+          <DialogHeader className="mb-2">
+            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              {confirmConfig.title}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 font-medium pt-2">
+              {confirmConfig.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-8 flex flex-col sm:flex-row gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+              className="flex-1 rounded-2xl font-bold text-slate-500 hover:bg-slate-100"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={confirmConfig.variant || 'default'}
+              onClick={async () => {
+                await confirmConfig.onConfirm();
+                setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+              }}
+              className="flex-1 rounded-2xl font-black uppercase text-xs tracking-widest py-6"
+            >
+              {confirmConfig.confirmLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Opción de Eliminación Compleja (Gasto con historial) */}
+      <Dialog 
+        open={deleteChoiceConfig.isOpen} 
+        onOpenChange={(open) => setDeleteChoiceConfig(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent className="max-w-[450px] rounded-[2.5rem] p-8 border-slate-100 z-[9999]">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              Eliminar Gasto con Historial
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 font-medium pt-3 space-y-3">
+              <p>
+                Este gasto tiene <span className="font-bold text-blue-600">{deleteChoiceConfig.paymentsCount} pagos</span> registrados.
+              </p>
+              {deleteChoiceConfig.hasDuplicate && (
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-blue-800 text-sm">
+                  <p className="font-bold mb-1">¡Duplicado detectado!</p>
+                  <p>Parece ser un duplicado de: <span className="font-black italic">"{deleteChoiceConfig.duplicateName}"</span></p>
+                </div>
+              )}
+              <p>¿Qué deseas hacer?</p>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 mt-4">
+            {deleteChoiceConfig.hasDuplicate && (
+              <Button
+                variant="outline"
+                className="w-full justify-start items-center p-6 rounded-2xl border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all group"
+                onClick={async () => {
+                   await deleteChoiceConfig.onMerge();
+                   setDeleteChoiceConfig(prev => ({ ...prev, isOpen: false }));
+                }}
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 mr-4 group-hover:scale-110 transition-transform">
+                   <TrendingUp className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-slate-900 text-sm">Fusionar Registros</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Traspasar pagos al duplicado y borrar este</p>
+                </div>
+              </Button>
+            )}
+            
+            <Button
+              variant="outline"
+              className="w-full justify-start items-center p-6 rounded-2xl border-red-100 hover:bg-red-50 hover:border-red-200 transition-all group"
+              onClick={async () => {
+                 await deleteChoiceConfig.onDeleteAll();
+                 setDeleteChoiceConfig(prev => ({ ...prev, isOpen: false }));
+              }}
+            >
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-600 mr-4 group-hover:scale-110 transition-transform">
+                 <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <p className="font-black text-slate-900 text-sm">Eliminar Todo</p>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Borrar gasto y TODO su historial de pagos</p>
+              </div>
+            </Button>
+          </div>
+
+          <DialogFooter className="mt-8">
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteChoiceConfig(prev => ({ ...prev, isOpen: false }))}
+              className="w-full rounded-2xl font-bold text-slate-400 py-6"
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

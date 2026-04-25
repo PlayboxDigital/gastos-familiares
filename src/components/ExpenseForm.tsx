@@ -75,7 +75,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     // Normalizar datos antes de enviar: fecha_pago nunca debe ser ""
     const normalizedData = {
       ...formData,
-      fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null)
+      fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null),
+      // Si es variable, el día de vencimiento no es relevante/obligatorio
+      dia_vencimiento: formData.tipo_gasto === 'variable' ? undefined : formData.dia_vencimiento
     };
     
     console.log("ITEM_ENVIADO_DIA_VENCIMIENTO:", normalizedData.dia_vencimiento);
@@ -212,39 +214,41 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="dia_vencimiento" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Día Venc.</Label>
-                <Input 
-                  id="dia_vencimiento" 
-                  type="number" 
-                  min="1"
-                  max="31"
-                  inputMode="numeric"
-                  value={formData.dia_vencimiento || ''}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    setFormData({ ...formData, dia_vencimiento: isNaN(val) ? 0 : val });
-                  }}
-                  className="h-12 sm:h-10 bg-slate-50 border-none font-bold rounded-xl"
-                  placeholder={new Date().getDate().toString()}
-                />
+            {formData.tipo_gasto !== 'variable' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dia_vencimiento" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Día Venc.</Label>
+                  <Input 
+                    id="dia_vencimiento" 
+                    type="number" 
+                    min="1"
+                    max="31"
+                    inputMode="numeric"
+                    value={formData.dia_vencimiento || ''}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setFormData({ ...formData, dia_vencimiento: isNaN(val) ? 0 : val });
+                    }}
+                    className="h-12 sm:h-10 bg-slate-50 border-none font-bold rounded-xl"
+                    placeholder={new Date().getDate().toString()}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fecha_vencimiento_picker" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Calcular día</Label>
+                  <Input 
+                    id="fecha_vencimiento_picker" 
+                    type="date" 
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const date = new Date(e.target.value + 'T12:00:00');
+                        setFormData({ ...formData, dia_vencimiento: date.getDate() });
+                      }
+                    }}
+                    className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="fecha_vencimiento_picker" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Calcular día</Label>
-                <Input 
-                  id="fecha_vencimiento_picker" 
-                  type="date" 
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const date = new Date(e.target.value + 'T12:00:00');
-                      setFormData({ ...formData, dia_vencimiento: date.getDate() });
-                    }
-                  }}
-                  className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">

@@ -13,6 +13,14 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+
 interface DebtListProps {
   debts: Debt[];
   onEdit: (debt: Debt) => void;
@@ -25,6 +33,8 @@ export const DebtList: React.FC<DebtListProps> = ({
   onDelete
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [idToDelete, setIdToDelete] = useState<string | null>(null);
 
   const filteredDebts = useMemo(() => {
     return debts.filter((d) => {
@@ -163,17 +173,8 @@ export const DebtList: React.FC<DebtListProps> = ({
                         className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all rounded-lg"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("DEUDA ITEM:", d);
-                          
-                          const idToDelete = d.id;
-                          if (!idToDelete || idToDelete.length < 30) {
-                            console.error("ID inválido:", idToDelete);
-                            return;
-                          }
-
-                          if (confirm('¿Estás seguro de eliminar esta deuda?')) {
-                            onDelete(idToDelete);
-                          }
+                          setIdToDelete(d.id);
+                          setShowDeleteConfirm(true);
                         }}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -194,6 +195,39 @@ export const DebtList: React.FC<DebtListProps> = ({
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm rounded-[2rem] z-[9999]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-slate-900">Eliminar Deuda</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium text-slate-600">¿Estás seguro de que querés eliminar esta deuda? Esta acción no se puede deshacer.</p>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              className="rounded-xl font-bold border-slate-200"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-black uppercase text-xs tracking-wider shadow-lg shadow-red-100"
+              onClick={() => {
+                if (idToDelete) {
+                  onDelete(idToDelete);
+                }
+                setShowDeleteConfirm(false);
+                setIdToDelete(null);
+              }}
+            >
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

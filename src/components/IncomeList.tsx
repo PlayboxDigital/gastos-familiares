@@ -18,6 +18,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+
 interface IncomeListProps {
   incomes: Income[];
   expenses: Expense[];
@@ -77,6 +85,8 @@ export const IncomeList: React.FC<IncomeListProps> = ({
 }) => {
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [clientFilter, setClientFilter] = useState('Todos');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [idToDelete, setIdToDelete] = useState<string | null>(null);
 
   const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
   const setSearchTerm = onSearchChange || setInternalSearchTerm;
@@ -114,20 +124,21 @@ export const IncomeList: React.FC<IncomeListProps> = ({
 
   const pendingIncomes = useMemo(() => {
     return filteredIncomes
-      .filter((income) => !isClientPaid(income, incomePayments))
-      .sort(sortByClientStatus);
+      .filter((income) => !isClientPaid(income, incomePayments) && !isClientInactive(income))
+      .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
   }, [filteredIncomes, incomePayments]);
 
   const collectedIncomes = useMemo(() => {
     return filteredIncomes
-      .filter((income) => isClientPaid(income, incomePayments))
-      .sort((a, b) => {
-        const inactiveOrder = sortByClientStatus(a, b);
-        if (inactiveOrder !== 0) return inactiveOrder;
-
-        return (b.fecha_cobro || '').localeCompare(a.fecha_cobro || '');
-      });
+      .filter((income) => isClientPaid(income, incomePayments) && !isClientInactive(income))
+      .sort((a, b) => (b.fecha_cobro || '').localeCompare(a.fecha_cobro || ''));
   }, [filteredIncomes, incomePayments]);
+
+  const inactiveIncomes = useMemo(() => {
+    return filteredIncomes
+      .filter((income) => isClientInactive(income))
+      .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+  }, [filteredIncomes]);
 
   const totalACobrarARS = useMemo(() => {
     return incomes
@@ -343,10 +354,10 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                     variant="ghost"
                     size="icon"
                     className="h-10 w-10 rounded-2xl text-slate-300 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => {
-                      if (confirm('¿Estás seguro de eliminar este registro?')) {
-                        onDelete(income.id);
-                      }
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setIdToDelete(income.id);
+                      setShowDeleteConfirm(true);
                     }}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -554,9 +565,8 @@ export const IncomeList: React.FC<IncomeListProps> = ({
                         className="h-10 w-10 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl"
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (confirm('¿Estás seguro de eliminar este registro?')) {
-                            onDelete(income.id);
-                          }
+                          setIdToDelete(income.id);
+                          setShowDeleteConfirm(true);
                         }}
                       >
                         <Trash2 className="w-5 h-5" />
@@ -701,6 +711,13 @@ export const IncomeList: React.FC<IncomeListProps> = ({
           <TrendingUp className="w-4 h-4" />,
           'No se registran cobros finalizados',
         )}
+
+        {inactiveIncomes.length > 0 && renderCardList(
+          inactiveIncomes,
+          'Clientes inactivos',
+          <Users className="w-4 h-4 opacity-50" />,
+          'No hay clientes inactivos',
+        )}
       </div>
 
       <div className="hidden md:block space-y-8">
@@ -717,7 +734,47 @@ export const IncomeList: React.FC<IncomeListProps> = ({
           <TrendingUp className="w-4 h-4" />,
           'No se registran cobros finalizados aún',
         )}
+
+        {inactiveIncomes.length > 0 && renderTable(
+          inactiveIncomes,
+          'Clientes inactivos',
+          <Users className="w-4 h-4 opacity-50" />,
+          'No hay clientes inactivos',
+        )}
       </div>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm rounded-[2rem] z-[9999]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-slate-900">Eliminar Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium text-slate-600">¿Estás seguro de que querés eliminar este registro? Esta acción es permanente.</p>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              className="rounded-xl font-bold border-slate-200"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-black uppercase text-xs tracking-wider shadow-lg shadow-red-100"
+              onClick={() => {
+                if (idToDelete) {
+                  onDelete(idToDelete);
+                }
+                setShowDeleteConfirm(false);
+                setIdToDelete(null);
+              }}
+            >
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     </TooltipProvider>
   );

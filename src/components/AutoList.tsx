@@ -16,6 +16,9 @@ export const AutoList: React.FC = () => {
   const [selectedAuto, setSelectedAuto] = useState<Auto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [idToDelete, setIdToDelete] = useState<string | null>(null);
+
   const [newAuto, setNewAuto] = useState({
     nombre: '',
     marca: '',
@@ -64,7 +67,6 @@ export const AutoList: React.FC = () => {
   };
 
   const handleDeleteAuto = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este auto?')) return;
     try {
       await autosService.eliminarAuto(id);
       fetchData();
@@ -128,7 +130,8 @@ export const AutoList: React.FC = () => {
                         className="text-slate-300 hover:text-red-500 rounded-xl"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteAuto(auto.id);
+                          setIdToDelete(auto.id);
+                          setShowDeleteConfirm(true);
                         }}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -237,6 +240,39 @@ export const AutoList: React.FC = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm rounded-[2rem] z-[9999]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-slate-900">Eliminar Vehículo</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium text-slate-600">¿Estás seguro de que querés eliminar este vehículo? Se borrarán todos sus registros asociados.</p>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              className="rounded-xl font-bold border-slate-200"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-black uppercase text-xs tracking-wider shadow-lg shadow-red-100"
+              onClick={() => {
+                if (idToDelete) {
+                  handleDeleteAuto(idToDelete);
+                }
+                setShowDeleteConfirm(false);
+                setIdToDelete(null);
+              }}
+            >
+              Eliminar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

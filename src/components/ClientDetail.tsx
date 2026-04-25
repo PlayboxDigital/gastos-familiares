@@ -3,7 +3,7 @@ import { Income, PaymentStatus, IngresoPago, IngresoPagoInput } from '../types';
 import { 
   X, Phone, Globe, Database, Github, Code, TrendingUp, Mail, 
   ExternalLink, Edit2, Calendar, DollarSign, Info, Shield, Server, Users,
-  Plus, CheckCircle2, AlertTriangle, Loader2
+  Plus, CheckCircle2, AlertTriangle, Loader2, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '@/components/ui/button';
@@ -11,19 +11,34 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { incomesService } from '../services/Clientes';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface ClientDetailProps {
   income: Income;
   isOpen: boolean;
   onClose: () => void;
   onEdit: (income: Income) => void;
+  onRefresh?: () => void;
 }
 
-export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onClose, onEdit }) => {
+export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onClose, onEdit, onRefresh }) => {
   const [pagos, setPagos] = useState<IngresoPago[]>([]);
   const [isLoadingPagos, setIsLoadingPagos] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingPago, setEditingPago] = useState<IngresoPago | null>(null);
+  
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pagoAEliminar, setPagoAEliminar] = useState<string | null>(null);
+  
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+  const [isDeletingHistory, setIsDeletingHistory] = useState(false);
   
   // Form state
   const [montoPagado, setMontoPagado] = useState<number>(income.monto_mensual || 0);
@@ -34,6 +49,33 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   const [comprobanteUrl, setComprobanteUrl] = useState('');
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [isUploadingComprobante, setIsUploadingComprobante] = useState(false);
+
+  useEffect(() => {
+    if (editingPago) {
+      setMontoPagado(editingPago.monto_pagado);
+      setPeriodo(editingPago.periodo);
+      setFechaPago(editingPago.fecha_pago);
+      
+      // Parse observation to extract formal payment info if present
+      const obs = editingPago.observacion || '';
+      if (obs.includes('[EFECTIVO]')) setFormaPago('Efectivo');
+      else if (obs.includes('[TRANSFERENCIA]')) setFormaPago('Transferencia');
+      
+      const compMatch = obs.match(/Comp: (https?:\/\/[^\s]+)/);
+      if (compMatch) setComprobanteUrl(compMatch[1]);
+      
+      // Extract the rest of the observation
+      const cleanObs = obs.replace(/\[.*?\]/, '').replace(/Comp: https?:\/\/[^\s]+/, '').trim();
+      setObservacion(cleanObs);
+    } else {
+      setMontoPagado(income.monto_mensual || 0);
+      setPeriodo(new Date().toISOString().substring(0, 7));
+      setFechaPago(new Date().toISOString().split('T')[0]);
+      setFormaPago('Transferencia');
+      setComprobanteUrl('');
+      setObservacion('');
+    }
+  }, [editingPago, income.monto_mensual]);
 
   useEffect(() => {
     if (isOpen && income.id) {
@@ -125,7 +167,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
 
       const fullObservacion = `[${formaPago.toUpperCase()}]${comprobanteOptimizadoUrl ? ` - Comp: ${comprobanteOptimizadoUrl}` : ''} ${observacion}`.trim();
 
-      const nuevoPago: IngresoPagoInput = {
+      const pagoData: IngresoPagoInput = {
         ingreso_id: income.id,
         cliente: income.cliente,
         periodo,
@@ -136,9 +178,16 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
         observacion: fullObservacion
       };
 
-      await incomesService.registrarPago(nuevoPago);
-      await cargarPagos();
+      if (editingPago) {
+        await incomesService.actualizarPagoIngreso(editingPago.id, pagoData);
+      } else {
+        await incomesService.registrarPago(pagoData);
+      }
 
+      await cargarPagos();
+      if (onRefresh) onRefresh();
+
+      setEditingPago(null);
       setMontoPagado(0);
       setFormaPago('Efectivo');
       setComprobanteUrl('');
@@ -146,11 +195,48 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
       setObservacion('');
       setShowForm(false);
     } catch (error) {
-      console.error("Error al registrar pago:", error);
-      alert(error instanceof Error ? error.message : "Error desconocido al registrar pago");
+      console.error("Error al procesar pago:", error);
+      alert(error instanceof Error ? error.message : "Error desconocido");
     } finally {
       setIsUploadingComprobante(false);
       setIsRegistering(false);
+    }
+  };
+
+  const eliminarPago = async (id: string) => {
+    console.log("CLIENT_DETAIL_ELIMINAR_PAGO_START:", id);
+    try {
+      await incomesService.eliminarPagoIngreso(id);
+      console.log("CLIENT_DETAIL_ELIMINAR_PAGO_SUCCESS:", id);
+      await cargarPagos();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error("CLIENT_DETAIL_ELIMINAR_PAGO_ERROR:", error);
+      alert(error instanceof Error ? error.message : "Error al eliminar el pago");
+    }
+  };
+
+  const handleClearHistory = async () => {
+    console.log("CLIENT_DETAIL_CLEAR_HISTORY_START:", { client: income.cliente, count: pagos.length });
+    if (isDeletingHistory) return;
+    setIsDeletingHistory(true);
+    try {
+      // Optamos por eliminar los pagos uno a uno para evitar problemas con RLS masivos si los hay, 
+      // aunque lo ideal sería un endpoint que borre todos los de un ingreso_id.
+      // Basado en el servicio actual, no hay un "borrarTodoElHistorialDeUnCliente".
+      for (const pago of pagos) {
+        console.log("CLIENT_DETAIL_CLEAR_HISTORY_DELETING_PAGO:", pago.id);
+        await incomesService.eliminarPagoIngreso(pago.id);
+      }
+      console.log("CLIENT_DETAIL_CLEAR_HISTORY_SUCCESS");
+      await cargarPagos();
+      if (onRefresh) onRefresh();
+      setShowClearHistoryConfirm(false);
+    } catch (error) {
+      console.error("CLIENT_DETAIL_CLEAR_HISTORY_ERROR:", error);
+      alert("Error al borrar el historial de pagos");
+    } finally {
+      setIsDeletingHistory(false);
     }
   };
 
@@ -158,7 +244,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
     const nuevoEstado = income.estado === 'inactivo' ? 'activo' : 'inactivo';
     try {
       await incomesService.actualizarIngreso(income.id, { estado: nuevoEstado });
-      alert(`Cliente marcado como ${nuevoEstado === 'activo' ? 'ACTIVO' : 'INACTIVO'}. Por favor, recarga para ver los cambios.`);
+      if (onRefresh) onRefresh();
     } catch (error) {
       alert("Error al cambiar estado del cliente");
     }
@@ -431,11 +517,29 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                     size="sm" 
                     variant="outline" 
                     className="h-8 rounded-xl border-blue-100 bg-blue-50 text-blue-600 font-bold text-[10px] hover:bg-blue-100 transition-all gap-1.5"
-                    onClick={() => setShowForm(!showForm)}
+                    onClick={() => {
+                      if (editingPago) {
+                        setEditingPago(null);
+                        setShowForm(false);
+                      } else {
+                        setShowForm(!showForm);
+                      }
+                    }}
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className={`w-3 h-3 transition-transform ${showForm ? 'rotate-45' : ''}`} />
                     {showForm ? 'Cancelar' : 'Registrar Pago'}
                   </Button>
+                  {pagos.length > 0 && (
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-8 rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 font-bold text-[10px] transition-all gap-1.5"
+                      onClick={() => setShowClearHistoryConfirm(true)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Borrar Historial
+                    </Button>
+                  )}
                 </div>
 
                 <AnimatePresence>
@@ -504,10 +608,22 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                             }}
                             className="h-10 bg-white border-blue-100 rounded-xl text-sm file:mr-3 file:border-0 file:bg-blue-50 file:text-blue-600 file:font-bold file:text-xs"
                           />
-                          {comprobanteFile && (
-                            <p className="text-[10px] text-blue-500 font-bold truncate">
-                              {comprobanteFile.name}
-                            </p>
+                          {(comprobanteFile || comprobanteUrl) && (
+                            <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-xl border border-blue-100">
+                              <p className="text-[10px] text-blue-500 font-bold truncate max-w-[150px]">
+                                {comprobanteFile ? comprobanteFile.name : 'Comprobante actual'}
+                              </p>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setComprobanteFile(null);
+                                  setComprobanteUrl('');
+                                }}
+                                className="p-1.5 text-red-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div className="space-y-1.5">
@@ -527,7 +643,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                           onClick={handleRegistrarPago}
                         >
                           {isRegistering || isUploadingComprobante ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          {isUploadingComprobante ? 'Subiendo comprobante...' : 'Confirmar Registro'}
+                          {isUploadingComprobante ? 'Subiendo comprobante...' : editingPago ? 'Confirmar Edición' : 'Confirmar Registro'}
                         </Button>
                       </div>
                     </motion.div>
@@ -549,7 +665,35 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                               {pago.periodo.split('-')[1]}/{pago.periodo.split('-')[0].substring(2)}
                             </div>
                             <div className="space-y-1">
-                              <p className="text-xs font-black text-slate-700">Periodo {pago.periodo}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-black text-slate-700">Periodo {pago.periodo}</p>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingPago(pago);
+                                      setShowForm(true);
+                                    }}
+                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                    title="Editar pago"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPagoAEliminar(pago.id);
+                                      setShowDeleteConfirm(true);
+                                    }}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Eliminar pago"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                               <div className="flex items-center gap-2">
                                 <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
                                   <Calendar className="w-2.5 h-2.5" /> {pago.fecha_pago}
@@ -690,6 +834,71 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
             Cerrar Ficha
           </Button>
         </div>
+
+        {/* Modal de confirmación de eliminación */}
+        <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <DialogContent className="max-w-sm rounded-[2rem] z-[9999]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black text-slate-900">Eliminar pago</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm font-medium text-slate-600">¿Estás seguro de que querés eliminar este pago? Esta acción no se puede deshacer.</p>
+            </div>
+            <DialogFooter className="flex gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                className="rounded-xl font-bold border-slate-200"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                className="rounded-xl font-black uppercase text-xs tracking-wider shadow-lg shadow-red-100"
+                onClick={async () => {
+                  console.log("ELIMINAR_PAGO_ID_CONFIRMED:", pagoAEliminar);
+                  if (!pagoAEliminar) return;
+                  await eliminarPago(pagoAEliminar);
+                  setShowDeleteConfirm(false);
+                  setPagoAEliminar(null);
+                }}
+              >
+                Eliminar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de confirmación de eliminación de historial */}
+        <Dialog open={showClearHistoryConfirm} onOpenChange={setShowClearHistoryConfirm}>
+          <DialogContent className="max-w-sm rounded-[2rem] z-[9999]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black text-slate-900">Borrar Historial</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm font-medium text-slate-600">¿Estás seguro de que querés borrar TODO el historial de pagos de {income.cliente}? Esta acción no se puede deshacer.</p>
+            </div>
+            <DialogFooter className="flex gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                className="rounded-xl font-bold border-slate-200"
+                onClick={() => setShowClearHistoryConfirm(false)}
+                disabled={isDeletingHistory}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                className="rounded-xl font-black uppercase text-xs tracking-wider shadow-lg shadow-red-100 gap-2"
+                onClick={handleClearHistory}
+                disabled={isDeletingHistory}
+              >
+                {isDeletingHistory && <Loader2 className="w-3 h-3 animate-spin" />}
+                Borrar Todo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </motion.div>
     </div>
   );

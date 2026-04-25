@@ -133,4 +133,61 @@ export const incomesService = {
     console.log("CLIENTES_SERVICE_REGISTRAR_PAGO_SUCCESS:", data);
     return data as IngresoPago;
   },
+
+  async actualizarPagoIngreso(id: string, pago: Partial<IngresoPagoInput>): Promise<IngresoPago> {
+    const { data, error } = await supabase
+      .from('ingresos_pagos')
+      .update(pago)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Error al actualizar pago: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error(`Error al actualizar pago: No se encontró el registro o no se pudo retornar el objeto.`);
+    }
+
+    return data as IngresoPago;
+  },
+
+  async eliminarPagoIngreso(id: string): Promise<void> {
+    console.log("CLIENTES_SERVICE_ELIMINAR_PAGO_INIT:", id);
+    
+    // 1. Antes de borrar: verificar existencia
+    const { data: existingPago, error: selectError } = await supabase
+      .from('ingresos_pagos')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    console.log("CLIENTES_SERVICE_SELECT_PAGO_BEFORE_DELETE:", { existingPago, selectError });
+
+    if (selectError) {
+      throw new Error(`Error al verificar existencia del pago: ${selectError.message}`);
+    }
+
+    if (!existingPago) {
+      throw new Error("No se encontró el registro de pago para eliminar (ID inexistente).");
+    }
+
+    // 2. Borrar con select para confirmar afectación
+    const { data, error } = await supabase
+      .from('ingresos_pagos')
+      .delete()
+      .eq('id', id)
+      .select();
+
+    console.log("CLIENTES_SERVICE_DELETE_PAGO_RESULT:", { data, error });
+
+    if (error) {
+      throw new Error(`Error al eliminar pago: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error("No se pudo eliminar el registro. Puede ser una restricción de seguridad (RLS) o el registro ya no existe.");
+    }
+  },
 };
