@@ -30,6 +30,10 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   const [periodo, setPeriodo] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
   const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0]);
   const [observacion, setObservacion] = useState('');
+  const [formaPago, setFormaPago] = useState<'Efectivo' | 'Transferencia'>('Transferencia');
+  const [comprobanteUrl, setComprobanteUrl] = useState('');
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [isUploadingComprobante, setIsUploadingComprobante] = useState(false);
 
   useEffect(() => {
     if (isOpen && income.id) {
@@ -49,48 +53,145 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
     }
   };
 
-  const handleRegistrarPago = async () => {
-    if (montoPagado < 0) return;
-    
-    setIsRegistering(true);
-    const montoEsperado = income.monto_mensual || 0;
-    
-    let estado: PaymentStatus = 'Pendiente';
-    if (montoPagado >= montoEsperado) {
-      estado = 'Pagado';
-    } else if (montoPagado > 0) {
-      estado = 'Parcial';
+  const uploadComprobanteToCloudinary = async (): Promise<string> => {
+    if (!comprobanteFile) return comprobanteUrl.trim();
+
+    const cloudName =
+      (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME ||
+      (import.meta as any).env?.VITE_CLOUDINARY_NAME;
+
+    const uploadPreset =
+      (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET ||
+      (import.meta as any).env?.VITE_CLOUDINARY_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      throw new Error('Falta configurar Cloudinary: VITE_CLOUDINARY_CLOUD_NAME y VITE_CLOUDINARY_UPLOAD_PRESET');
     }
 
-    const nuevoPago: IngresoPagoInput = {
-      ingreso_id: income.id,
-      cliente: income.cliente,
-      periodo,
-      monto: montoEsperado,
-      monto_pagado: montoPagado,
-      fecha_pago: fechaPago,
-      estado,
-      observacion
-    };
+    const formData = new FormData();
+    formData.append('file', comprobanteFile);
+    formData.append('upload_preset', uploadPreset);
+    formData.append('folder', 'comprobantes/clientes');
+    formData.append('tags', 'clientes,cobranzas,comprobantes');
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('No se pudo subir el comprobante a Cloudinary');
+    }
+
+    const data = await response.json();
+
+    const secureUrl = data.secure_url || '';
+    const publicId = data.public_id || '';
+
+    if (!secureUrl) {
+      throw new Error('Cloudinary no devolvió una URL válida');
+    }
+
+    // URL optimizada para comprobantes: calidad automática, formato automático y ancho limitado.
+    if (publicId && cloudName) {
+      return `https://res.cloudinary.com/${cloudName}/image/upload/q_auto:low,f_auto,w_1200/${publicId}`;
+    }
+
+    return secureUrl.replace('/upload/', '/upload/q_auto:low,f_auto,w_1200/');
+  };
+
+  const handleRegistrarPago = async () => {
+    if (isRegistering || isUploadingComprobante || montoPagado < 0) return;
+
+    if (formaPago === 'Transferencia' && !comprobanteFile && !comprobanteUrl.trim()) {
+      alert("Debes subir comprobante para transferencia");
+      return;
+    }
+
+    setIsRegistering(true);
+    setIsUploadingComprobante(true);
 
     try {
+      const comprobanteOptimizadoUrl = await uploadComprobanteToCloudinary();
+
+      const montoEsperado = income.monto_mensual || 0;
+
+      let estado: PaymentStatus = 'Pendiente';
+      if (montoPagado >= montoEsperado) {
+        estado = 'Pagado';
+      } else if (montoPagado > 0) {
+        estado = 'Parcial';
+      }
+
+      const fullObservacion = `[${formaPago.toUpperCase()}]${comprobanteOptimizadoUrl ? ` - Comp: ${comprobanteOptimizadoUrl}` : ''} ${observacion}`.trim();
+
+      const nuevoPago: IngresoPagoInput = {
+        ingreso_id: income.id,
+        cliente: income.cliente,
+        periodo,
+        monto: montoEsperado,
+        monto_pagado: montoPagado,
+        fecha_pago: fechaPago,
+        estado,
+        observacion: fullObservacion
+      };
+
       await incomesService.registrarPago(nuevoPago);
       await cargarPagos();
-      setShowForm(false);
+
+      setMontoPagado(0);
+      setFormaPago('Efectivo');
+      setComprobanteUrl('');
+      setComprobanteFile(null);
       setObservacion('');
+      setShowForm(false);
     } catch (error) {
       console.error("Error al registrar pago:", error);
+      alert(error instanceof Error ? error.message : "Error desconocido al registrar pago");
     } finally {
+      setIsUploadingComprobante(false);
       setIsRegistering(false);
     }
+  };
+
+  const toggleEstado = async () => {
+    const nuevoEstado = income.estado === 'inactivo' ? 'activo' : 'inactivo';
+    try {
+      await incomesService.actualizarIngreso(income.id, { estado: nuevoEstado });
+      alert(`Cliente marcado como ${nuevoEstado === 'activo' ? 'ACTIVO' : 'INACTIVO'}. Por favor, recarga para ver los cambios.`);
+    } catch (error) {
+      alert("Error al cambiar estado del cliente");
+    }
+  };
+
+  const handleWhatsApp = () => {
+    if (!income.telefono_cliente) {
+      alert("Este cliente no tiene un teléfono registrado.");
+      return;
+    }
+
+    const monto = income.moneda === 'USD'
+      ? `U$D ${income.monto_mensual || 0}`
+      : `$${(income.monto_mensual || income.monto_mensual_ars || income.monto_total || 0).toLocaleString()}`;
+
+    const mensaje = `Hola ${income.cliente}, ¿cómo estás? Te recuerdo que el pago mensual del servicio está próximo a vencer. El importe es de ${monto}.`;
+    const encoded = encodeURIComponent(mensaje);
+    const phone = income.telefono_cliente.replace(/\D/g, '');
+
+    if (!phone) {
+      alert("El teléfono del cliente no es válido.");
+      return;
+    }
+
+    window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
   };
 
   if (!isOpen) return null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'activo': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'inactivo': return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'activo': return 'bg-emerald-100 text-emerald-700 border-emerald-200 shadow-sm';
+      case 'inactivo': return 'bg-slate-100 text-slate-400 border-slate-200 grayscale opacity-60';
       case 'finalizado': return 'bg-red-100 text-red-700 border-red-200';
       default: return 'bg-blue-100 text-blue-700 border-blue-200';
     }
@@ -105,18 +206,20 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   };
 
   const getDbSystem = (income: Income) => {
-    const dbType = income.db_type?.toLowerCase();
+    const dbType = (income.db_type || '').toLowerCase();
     const dbLink = (income.link_db || income.supabase_url || '').toLowerCase();
     const appLink = (income.link_app || income.project_url || '').toLowerCase();
 
-    if (dbType === 'google_sheets' || dbLink.includes('docs.google.com')) {
+    if (dbType.includes('sheets') || dbLink.includes('docs.google.com')) {
       return { label: 'Google Sheets', className: 'bg-amber-100 text-amber-700 border-amber-200', iconColor: 'bg-amber-500', type: 'google_sheets' };
-    } else if (dbType === 'appsheet' || appLink.includes('appsheet.com')) {
+    } else if (dbType.includes('appsheet') || appLink.includes('appsheet.com')) {
       return { label: 'AppSheet', className: 'bg-blue-100 text-blue-700 border-blue-200', iconColor: 'bg-blue-500', type: 'appsheet' };
-    } else if (dbType === 'supabase' || dbLink.includes('supabase.com')) {
+    } else if (dbType.includes('ia') || dbType.includes('ai')) {
+      return { label: 'App Inteligente', className: 'bg-purple-100 text-purple-700 border-purple-200', iconColor: 'bg-purple-500', type: 'ia' };
+    } else if (dbType.includes('supabase') || dbLink.includes('supabase.com')) {
       return { label: 'Supabase', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', iconColor: 'bg-emerald-500', type: 'supabase' };
     } else {
-      return { label: 'Sin sistema', className: 'bg-slate-100 text-slate-700 border-slate-200', iconColor: 'bg-slate-500', type: 'none' };
+      return { label: 'Servicio', className: 'bg-slate-100 text-slate-700 border-slate-200', iconColor: 'bg-slate-500', type: 'none' };
     }
   };
 
@@ -168,7 +271,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative bg-white w-full h-full sm:h-auto sm:max-w-4xl sm:rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden flex flex-col sm:max-h-[90vh]"
+        className="relative bg-white w-full h-full sm:h-auto sm:max-w-5xl sm:rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden flex flex-col sm:max-h-[95vh]"
       >
         {/* Header Section */}
         <div className="p-4 md:p-8 bg-slate-50/50 border-b border-slate-100 shrink-0 mt-[env(safe-area-inset-top)] sm:mt-0">
@@ -206,23 +309,32 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                 </div>
               </div>
             </div>
-            <div className="flex gap-1 md:gap-2 ml-2">
+            <div className="flex gap-1 md:gap-3 ml-2 items-center">
               <Button 
                 variant="outline" 
-                size="sm" 
-                className="rounded-xl border-slate-200 font-bold flex h-9 md:h-10 px-2 md:px-4 hover:bg-slate-50 transition-all sm:flex hidden"
+                size="icon" 
+                className={`rounded-2xl h-10 w-10 md:h-12 md:w-12 transition-all ${income.estado === 'inactivo' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : 'border-slate-200 text-slate-400 bg-white'}`}
+                onClick={toggleEstado}
+                title={income.estado === 'inactivo' ? 'Habilitar Cliente' : 'Deshabilitar Cliente'}
+              >
+                {income.estado === 'inactivo' ? <CheckCircle2 className="w-5 h-5" /> : <X className="w-5 h-5" />}
+              </Button>
+
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="rounded-2xl h-10 w-10 md:h-12 md:w-12 border-slate-200 text-blue-600 hover:bg-slate-50 transition-all sm:flex hidden"
                 onClick={() => onEdit(income)}
               >
-                <Edit2 className="w-4 h-4 text-blue-600" />
-                <span>Editar</span>
+                <Edit2 className="w-5 h-5" />
               </Button>
               <Button 
                 variant="secondary" 
                 size="icon" 
-                className="rounded-xl h-9 w-9 md:h-10 md:w-10 text-slate-400"
+                className="rounded-2xl h-10 w-10 md:h-12 md:w-12 text-slate-400"
                 onClick={onClose}
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </Button>
             </div>
           </div>
@@ -267,10 +379,10 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                 </div>
 
                 <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vencimiento</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estado Cobro</p>
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-slate-300" />
-                    <p className="text-2xl font-black text-slate-800">Día {income.dia_vencimiento || 10}</p>
+                    <p className="text-xl font-black text-slate-800">{income.estado_pago}</p>
                   </div>
                   <p className="text-[10px] text-slate-300 italic">Ciclo mensual</p>
                 </div>
@@ -334,9 +446,20 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                       exit={{ opacity: 0, height: 0 }}
                       className="bg-blue-50/50 border border-blue-100 rounded-[2rem] p-6 space-y-4 overflow-hidden"
                     >
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Periodo (Mes/Año)</label>
+                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Forma de Pago</label>
+                          <select 
+                            value={formaPago} 
+                            onChange={(e) => setFormaPago(e.target.value as any)}
+                            className="w-full h-10 px-3 bg-white border border-blue-100 rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Efectivo">Efectivo</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Periodo</label>
                           <Input 
                             type="month" 
                             value={periodo}
@@ -357,7 +480,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Fecha de Pago</label>
+                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Fecha Pago</label>
                           <Input 
                             type="date" 
                             value={fechaPago}
@@ -366,23 +489,45 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                           />
                         </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Observación / Nota</label>
-                        <Input 
-                          placeholder="Ej: Transferencia Banco Galicia..."
-                          value={observacion}
-                          onChange={(e) => setObservacion(e.target.value)}
-                          className="h-10 bg-white border-blue-100 rounded-xl text-sm"
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">
+                            Comprobante {formaPago === 'Transferencia' ? '(obligatorio)' : '(opcional)'}
+                          </label>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              setComprobanteFile(file);
+                              setComprobanteUrl('');
+                            }}
+                            className="h-10 bg-white border-blue-100 rounded-xl text-sm file:mr-3 file:border-0 file:bg-blue-50 file:text-blue-600 file:font-bold file:text-xs"
+                          />
+                          {comprobanteFile && (
+                            <p className="text-[10px] text-blue-500 font-bold truncate">
+                              {comprobanteFile.name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Nota Interna</label>
+                          <Input 
+                            placeholder="Ej: Banco Galicia..."
+                            value={observacion}
+                            onChange={(e) => setObservacion(e.target.value)}
+                            className="h-10 bg-white border-blue-100 rounded-xl text-sm"
+                          />
+                        </div>
                       </div>
                       <div className="flex justify-end pt-2">
                         <Button 
-                          disabled={isRegistering}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10 px-6 font-black uppercase text-xs tracking-wider shadow-lg shadow-blue-200 gap-2"
+                          disabled={isRegistering || isUploadingComprobante}
+                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-12 px-8 font-black uppercase text-xs tracking-wider shadow-lg shadow-blue-200 gap-2"
                           onClick={handleRegistrarPago}
                         >
-                          {isRegistering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Confirmar Registro
+                          {isRegistering || isUploadingComprobante ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {isUploadingComprobante ? 'Subiendo comprobante...' : 'Confirmar Registro'}
                         </Button>
                       </div>
                     </motion.div>
@@ -410,7 +555,19 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                                   <Calendar className="w-2.5 h-2.5" /> {pago.fecha_pago}
                                 </p>
                                 {pago.observacion && (
-                                  <p className="text-[10px] text-slate-300 italic truncate max-w-[150px]">• {pago.observacion}</p>
+                                  pago.observacion.includes('Comp: http') ? (
+                                    <a
+                                      href={pago.observacion.split('Comp: ')[1]?.split(' ')[0]}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] text-blue-500 font-bold underline truncate max-w-[150px]"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      Ver comprobante
+                                    </a>
+                                  ) : (
+                                    <p className="text-[10px] text-slate-300 italic truncate max-w-[150px]">• {pago.observacion}</p>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -525,7 +682,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
 
         {/* Footer/Actions */}
         <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">PlayBox Administración © 2024</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Gastos Familiares © 2024</p>
           <Button 
             className="bg-slate-900 hover:bg-black text-white rounded-2xl px-8 font-black uppercase tracking-tight shadow-xl shadow-slate-200"
             onClick={onClose}

@@ -21,6 +21,7 @@ import {
   DebtInput,
   Income,
   IncomeInput,
+  IngresoPago,
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
@@ -775,6 +776,7 @@ export default function App() {
           <IncomeList 
             incomes={incomes}
             expenses={expenses}
+            incomePayments={incomePayments}
             onEdit={handleEditIncome}
             onDetail={(income) => setSelectedIncomeForDetail(income)}
             onDelete={handleDeleteIncome}
@@ -787,12 +789,12 @@ export default function App() {
       case 'autos':
         return <AutoList />;
       default:
-        console.log("APP_COMPONENTE_CON_EXPENSES: Dashboard (default)", expenses.length);
         return (
           <Dashboard
             expenses={expenses}
             categories={categories}
             incomes={incomes}
+            incomePayments={incomePayments}
             debts={debts}
             history={globalHistory}
             onQuickPayExpense={handleActionPayment}

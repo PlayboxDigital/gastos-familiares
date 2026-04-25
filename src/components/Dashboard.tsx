@@ -18,7 +18,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt } from '../types';
+import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt, IngresoPago } from '../types';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -195,54 +195,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
         return b.realPercent - a.realPercent;
       });
   }, [categories, monthlyExpenses]);
-  const monthlyIncomes = useMemo(() => 
-    incomes.filter(i => {
-      try {
-        return isSameMonth(parseISO(i.fecha || ''), currentMonth);
-      } catch {
-        return false;
-      }
-    }),
-  [incomes, currentMonth]);
-
-  const totalIncomes = useMemo(() => 
-    monthlyIncomes.reduce((sum, i) => sum + i.monto, 0),
-  [monthlyIncomes]);
-
-  const availableEstimado = totalIncomes - totalMonthly;
-  const totalCobrado = useMemo(() => {
-    return incomePayments
-      .filter(p => p.periodo === currentPeriod && (p.estado === 'Pagado' || p.estado === 'Parcial'))
-      .reduce((sum, p) => sum + (p.monto_pagado || 0), 0);
-  }, [incomePayments, currentPeriod]);
-
   const activeIncomes = useMemo(() => {
-    return incomes.filter(i => {
+    return (incomes || []).filter(i => {
       const isStatusActive = (i.estado?.toLowerCase() || 'activo') === 'activo';
-      const hasMontoMensual = (i.monto_mensual || i.monto_mensual_ars || i.monto || 0) > 0;
-      return isStatusActive || (hasMontoMensual && !i.estado);
+      return isStatusActive;
     });
   }, [incomes]);
 
-  const uniqueClientsCount = useMemo(() => activeIncomes.length, [activeIncomes]);
+  const totalCobroMensualClientes = useMemo(() => {
+    return activeIncomes.reduce((sum, i) => {
+      const monto = i.monto_mensual || i.monto_mensual_ars || i.monto || i.monto_total || 0;
+      return sum + monto;
+    }, 0);
+  }, [activeIncomes]);
 
-  const pendingCollectionsCount = useMemo(() => {
-    if (!activeIncomes.length) return 0;
-    
-    return activeIncomes.filter(income => {
-      // Buscar pago para este cliente en el periodo actual
-      const payment = incomePayments.find(p => 
-        p.ingreso_id === income.id && 
-        p.periodo === currentPeriod
-      );
-      
-      // Si no hay pago -> pendiente
-      if (!payment) return true;
-      
-      // Si el pago no está Pagado -> pendiente
-      return payment.estado !== 'Pagado';
-    }).length;
-  }, [activeIncomes, incomePayments, currentPeriod]);
+  const libreEstimado = totalCobroMensualClientes - totalMonthly;
 
   const pendingDebtsSum = useMemo(() => 
     debts.filter(d => d.estado !== 'pagada').reduce((sum, d) => sum + (d.saldo_pendiente || 0), 0),
@@ -363,53 +330,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [pendingEssentialExpenses]);
 
   const clientesPorCobrar = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     return incomes
-      .filter(i => i.estado_pago !== 'Pagado')
-      .map(i => {
-        let deadlineDate: Date;
-        try {
-          deadlineDate = parseISO(i.fecha_vencimiento || i.fecha || '');
-          if (isNaN(deadlineDate.getTime())) throw new Error();
-        } catch {
-          deadlineDate = today;
-        }
-        deadlineDate.setHours(0, 0, 0, 0);
-        
-        const diff = differenceInDays(deadlineDate, today);
-        let urgency: 'vencido' | 'hoy' | 'pronto' | 'lejano';
+      .filter((income) => (income.estado?.toLowerCase() || 'activo') === 'activo')
+      .map((income) => {
+        const payment = incomePayments.find((p) =>
+          p.ingreso_id === income.id &&
+          p.periodo === currentPeriod
+        );
 
-        if (isBefore(deadlineDate, today)) {
-          urgency = 'vencido';
-        } else if (isSameDay(deadlineDate, today)) {
-          urgency = 'hoy';
-        } else if (diff <= 7) {
-          urgency = 'pronto';
-        } else {
-          urgency = 'lejano';
-        }
-
-        const saldo = (i.monto_total || i.monto || 0) - (i.monto_cobrado || 0);
+        const monto = income.monto_mensual || income.monto_mensual_ars || income.monto || income.monto_total || 0;
+        const pagado = payment?.monto_pagado || 0;
+        const saldo = Math.max(0, monto - pagado);
+        const estado = payment?.estado || income.estado_pago || 'Pendiente';
 
         return {
-          ...i,
-          deadlineDate,
-          urgency,
-          diff,
-          saldo
+          ...income,
+          saldo,
+          estado,
         };
       })
-      .sort((a, b) => {
-        const order = { vencido: 0, hoy: 1, pronto: 2, lejano: 3 };
-        if (order[a.urgency] !== order[b.urgency]) {
-          return order[a.urgency] - order[b.urgency];
-        }
-        return a.deadlineDate.getTime() - b.deadlineDate.getTime();
-      })
+      .filter((income) => income.estado !== 'Pagado' && income.saldo > 0)
+      .sort((a, b) => b.saldo - a.saldo)
       .slice(0, 6);
-  }, [incomes]);
+  }, [incomes, incomePayments, currentPeriod]);
 
   const currentMonthName = useMemo(() => {
     try {
@@ -465,150 +408,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
         <KPICard
-          title="Cobranzas"
-          value={`$${totalCobrado.toLocaleString()}`}
-          icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
-          description={`Ingresos cobrados ${currentMonthName}`}
-          color="emerald"
+          title="Cobro Mensual Clientes"
+          value={`$${totalCobroMensualClientes.toLocaleString()}`}
+          icon={<Users className="h-5 w-5 text-indigo-500" />}
+          description="Potencial bruto mensual"
+          color="indigo"
         />
         <KPICard
-          title="Gastos Totales"
+          title="Gastos del Mes"
           value={`$${totalMonthly.toLocaleString()}`}
-          icon={<DollarSign className="h-5 w-5 text-indigo-500" />}
-          description="Por pagar (Neto)"
-          color="indigo"
-        />
-        <KPICard
-          title="Disponible"
-          value={`$${availableEstimado.toLocaleString()}`}
-          icon={<Wallet className="h-5 w-5 text-purple-500" />}
-          description="Balance proyectado"
-          color={availableEstimado >= 0 ? "indigo" : "rose"}
-        />
-        <KPICard
-          title="Avance de Pagos"
-          value={`${Math.round((totalPagado / (totalMonthly || 1)) * 100)}%`}
-          icon={<FlagIcon className="h-5 w-5 text-slate-500" />}
-          description="% del monto mensual abonado"
-          color="slate"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-        <KPICard
-          title="Pagado"
-          value={`$${totalPagado.toLocaleString()}`}
-          icon={<ArrowDownRight className="h-5 w-5 text-emerald-500" />}
-          description="Abonado"
-          compact
-          color="emerald"
-        />
-        <KPICard
-          title="Pendiente"
-          value={`$${totalPendiente.toLocaleString()}`}
-          icon={<ArrowUpRight className="h-5 w-5 text-amber-500" />}
-          description="Saldo por pagar"
-          compact
-          color="amber"
-        />
-        <KPICard
-          title="Clientes"
-          value={uniqueClientsCount.toString()}
-          icon={<Users className="h-5 w-5 text-blue-500" />}
-          description="Activos este mes"
-          compact
-          color="indigo"
-          onClick={() => onTabChange?.('incomes')}
-        />
-        <KPICard
-          title="Deudas"
-          value={`$${pendingDebtsSum.toLocaleString()}`}
-          icon={<AlertTriangle className="h-5 w-5 text-rose-500" />}
-          description="Monto adeudado"
-          compact
+          icon={<TrendingDown className="h-5 w-5 text-rose-500" />}
+          description="Total gastos mensuales"
           color="rose"
-          onClick={() => onTabChange?.('debts')}
+        />
+        <KPICard
+          title="Libre Estimado"
+          value={`$${libreEstimado.toLocaleString()}`}
+          icon={<Wallet className="h-5 w-5 text-emerald-500" />}
+          description="Balance proyectado"
+          color={libreEstimado >= 0 ? "emerald" : "rose"}
         />
       </div>
 
       <div className="space-y-4">
-        {categoryMetrics.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="rounded-2xl md:rounded-3xl border border-slate-100 bg-white shadow-sm overflow-hidden md:col-span-2">
-              <CardHeader className="p-4 md:p-6 pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg font-black text-slate-900 tracking-tight">Control de Presupuesto Mensual</CardTitle>
-                    <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Control por rubro / categoría</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> OK
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> 80%+
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
-                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500" /> CRÍTICO
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-4 md:p-6 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {categoryMetrics.map((cat) => (
-                    <div key={cat.categoria} className="space-y-2 group p-4 rounded-2xl bg-slate-50/50 border border-transparent hover:border-slate-100 transition-all hover:bg-white hover:shadow-md">
-                      <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-tight">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                          <span className="text-slate-700 truncate">{cat.categoria}</span>
-                        </div>
-                        <span className={
-                          cat.status === 'exceeded' ? 'text-rose-600' : 
-                          cat.status === 'warning' ? 'text-amber-600' : 
-                          'text-slate-400 font-bold'
-                        }>
-                          ${cat.spent.toLocaleString()} <span className="text-slate-300">/</span> {cat.limit > 0 ? `$${cat.limit.toLocaleString()}` : <span className="text-slate-300 opacity-50">—</span>}
-                        </span>
-                      </div>
-
-                      {cat.limit > 0 ? (
-                        <>
-                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${cat.percent}%` }}
-                              className={`h-full rounded-full transition-all ${
-                                cat.status === 'exceeded' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
-                                cat.status === 'warning' ? 'bg-amber-500' : 
-                                'bg-emerald-500'
-                              }`}
-                            />
-                          </div>
-                          <div className="flex justify-between items-center h-4">
-                            <span className={`text-[9px] font-bold ${
-                              cat.status === 'exceeded' ? 'text-rose-500' : 'text-slate-400'
-                            }`}>
-                              {cat.status === 'exceeded' ? 'Límite excedido' : `${Math.round(cat.realPercent)}% consumido`}
-                            </span>
-                            {cat.status === 'exceeded' && <AlertTriangle className="w-3 h-3 text-rose-500 animate-pulse" />}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-between h-5">
-                          <span className="text-[9px] font-bold text-slate-400 italic">Sin límite configurado</span>
-                          <span className="text-[8px] font-black text-slate-300 uppercase tracking-tighter bg-slate-100 px-1 rounded">Budget Off</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -732,14 +556,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
               {clientesPorCobrar.length > 0 ? (
                 clientesPorCobrar.map((i) => {
-                  const urgencyLabels = {
-                    vencido: { text: 'Vencido', color: 'text-rose-600 bg-rose-50 border-rose-100', icon: <Flame className="w-2.5 h-2.5" /> },
-                    hoy: { text: 'Hoy', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: <Zap className="w-2.5 h-2.5" /> },
-                    pronto: { text: `${i.diff}d`, color: 'text-blue-600 bg-blue-50 border-blue-100', icon: <Calendar className="w-2.5 h-2.5" /> },
-                    lejano: { text: 'Prox', color: 'text-slate-500 bg-slate-50 border-slate-100', icon: <Activity className="w-2.5 h-2.5" /> }
+                  const config = {
+                    text: i.estado === 'Parcial' ? 'Parcial' : 'Pendiente',
+                    color: i.estado === 'Parcial'
+                      ? 'text-amber-600 bg-amber-50 border-amber-100'
+                      : 'text-blue-600 bg-blue-50 border-blue-100',
+                    icon: i.estado === 'Parcial'
+                      ? <Activity className="w-2.5 h-2.5" />
+                      : <Calendar className="w-2.5 h-2.5" />
                   };
-
-                  const config = urgencyLabels[i.urgency];
 
                   return (
                     <button
@@ -965,6 +790,82 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </CardContent>
         </Card>
       </div>
+
+      {categoryMetrics.length > 0 && (
+        <div className="grid grid-cols-1 mb-6">
+          <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
+            <CardHeader className="p-4 md:px-8 md:pt-8 pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg md:text-xl font-black text-slate-900 tracking-tight underline decoration-emerald-200 decoration-8 underline-offset-[-2px] decoration-skip-ink-none">Control de Presupuesto Mensual</CardTitle>
+                  <CardDescription className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">Control por rubro / categoría</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> OK
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> 80%+
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500" /> CRÍTICO
+                  </span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 md:p-8 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {categoryMetrics.map((cat) => (
+                  <div key={cat.categoria} className="space-y-3 group p-4 rounded-2xl bg-slate-50/50 border border-transparent hover:border-slate-100 transition-all hover:bg-white hover:shadow-md">
+                    <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-tight">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span className="text-slate-700 truncate">{cat.categoria}</span>
+                      </div>
+                      <span className={
+                        cat.status === 'exceeded' ? 'text-rose-600' : 
+                        cat.status === 'warning' ? 'text-amber-600' : 
+                        'text-slate-400 font-bold'
+                      }>
+                        ${cat.spent.toLocaleString()} <span className="text-slate-300">/</span> {cat.limit > 0 ? `$${cat.limit.toLocaleString()}` : <span className="text-slate-300 opacity-50">—</span>}
+                      </span>
+                    </div>
+
+                    {cat.limit > 0 ? (
+                      <>
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${cat.percent}%` }}
+                            className={`h-full rounded-full transition-all ${
+                              cat.status === 'exceeded' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
+                              cat.status === 'warning' ? 'bg-amber-500' : 
+                              'bg-emerald-500'
+                            }`}
+                          />
+                        </div>
+                        <div className="flex justify-between items-center h-4">
+                          <span className={`text-[9px] font-bold ${
+                            cat.status === 'exceeded' ? 'text-rose-500' : 'text-slate-400'
+                          }`}>
+                            {cat.status === 'exceeded' ? 'Límite excedido' : `${Math.round(cat.realPercent)}% consumido`}
+                          </span>
+                          {cat.status === 'exceeded' && <AlertTriangle className="w-3 h-3 text-rose-500 animate-pulse" />}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between h-5">
+                        <span className="text-[9px] font-bold text-slate-400 italic">Sin límite configurado</span>
+                        <span className="text-[8px] font-black text-slate-300 uppercase tracking-tighter bg-slate-100 px-1 rounded">Budget Off</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 pb-12">
         <Card className="rounded-2xl md:rounded-[2.5rem] border-none bg-white shadow-xl shadow-slate-200/50">

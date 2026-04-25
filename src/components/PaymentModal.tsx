@@ -221,6 +221,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
       if (selectedFile) {
         const uploadRes = await cloudinaryService.uploadFile(selectedFile);
+
+// generar URL optimizada liviana (clave)
+const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
+  quality: 'auto:low',
+  fetch_format: 'auto',
+  width: 1200
+});
         cloudinaryData = {
           comprobante_nombre_original: selectedFile.name,
           comprobante_cloudinary_public_id: uploadRes.public_id,
@@ -231,9 +238,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           comprobante_cloudinary_bytes: uploadRes.bytes,
           comprobante_cloudinary_width: uploadRes.width,
           comprobante_cloudinary_height: uploadRes.height,
-          comprobante_transformado_url: cloudinaryService.getOptimizedUrl(
-            uploadRes.secure_url
-          ),
+          comprobante_transformado_url: optimizedUrl,
         };
       }
 

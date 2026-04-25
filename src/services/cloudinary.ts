@@ -89,10 +89,18 @@ export const cloudinaryService = {
 
   /**
    * Genera una URL transformada optimizada para consumo liviano.
-   * Aplica format auto, quality auto y ancho máximo de 1600px.
+   * Aplica format auto, quality auto y ancho máximo de 1600px por defecto.
    */
-  getOptimizedUrl(url: string): string {
+  getOptimizedUrl(url: string, options?: { quality?: string, fetch_format?: string, width?: number }): string {
     if (!url) return '';
+    
+    if (options) {
+      const q = options.quality || 'auto';
+      const f = options.fetch_format || 'auto';
+      const w = options.width || 1600;
+      return url.replace('/upload/', `/upload/f_${f},q_${q},w_${w}/`);
+    }
+    
     // Reemplaza /upload/ por /upload/f_auto,q_auto,w_1600/
     return url.replace('/upload/', '/upload/f_auto,q_auto,w_1600/');
   }

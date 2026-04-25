@@ -115,6 +115,7 @@ export const incomesService = {
   },
 
   async registrarPago(pago: IngresoPagoInput): Promise<IngresoPago> {
+    console.log("CLIENTES_SERVICE_REGISTRAR_PAGO_INIT:", pago);
     const { data, error } = await supabase
       .from('ingresos_pagos')
       .insert(pago)
@@ -122,9 +123,14 @@ export const incomesService = {
       .single();
 
     if (error) {
+      console.error("CLIENTES_SERVICE_REGISTRAR_PAGO_ERROR:", error);
+      if (error.message.includes('row-level security policy')) {
+        throw new Error(`Error de Seguridad (RLS): No tienes permisos para insertar en 'ingresos_pagos'. Por favor, verifica las políticas de Supabase.`);
+      }
       throw new Error(`Error al registrar pago: ${error.message}`);
     }
 
+    console.log("CLIENTES_SERVICE_REGISTRAR_PAGO_SUCCESS:", data);
     return data as IngresoPago;
   },
 };

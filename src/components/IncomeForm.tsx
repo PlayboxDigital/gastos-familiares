@@ -5,6 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
@@ -20,13 +21,13 @@ interface IncomeFormProps {
   incomes?: Income[]; // Para sugerir mails ya usados
 }
 
-const METODOS_PAGO = ['Transferencia', 'Efectivo', 'Tarjeta', 'Depósito', 'Otro'];
+const METODOS_PAGO = ['Transferencia', 'Efectivo'];
 
 export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmit, incomeToEdit, incomes = [] }) => {
   const [formData, setFormData] = useState<IncomeInput>({
     cliente: '',
     telefono_cliente: '',
-    descripcion_servicio: '',
+    descripcion_servicio: 'AppSheet', // Default value
     logo_url: '',
     supabase_url: '',
     supabase_email: '',
@@ -34,6 +35,9 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     cloudinary_email: '',
     github_url: '',
     github_email: '',
+    project_url: '',
+    link_app: '',
+    email_editor: '',
     ai_studio_url: '',
     ai_studio_email: '',
     vscode_url: '',
@@ -43,6 +47,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     moneda: 'ARS',
     monto_mensual_ars: 0,
     dia_vencimiento: 10,
+    estado: 'activo',
     // Fields for backward compatibility or internal logic
     concepto: '',
     monto_total: 0,
@@ -53,6 +58,8 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     observaciones: '',
   });
 
+  const [techModality, setTechModality] = useState<'AI Studio' | 'VSCode'>('AI Studio');
+
   // Tarea: Obtener mails únicos cargados para sugerencias
   const existingEmails = React.useMemo(() => {
     const emails = new Set<string>();
@@ -60,6 +67,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
       if (i.supabase_email) emails.add(i.supabase_email);
       if (i.cloudinary_email) emails.add(i.cloudinary_email);
       if (i.github_email) emails.add(i.github_email);
+      if (i.email_editor) emails.add(i.email_editor);
       if (i.ai_studio_email) emails.add(i.ai_studio_email);
       if (i.vscode_email) emails.add(i.vscode_email);
     });
@@ -88,8 +96,11 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         ...incomeToEdit,
         cliente: incomeToEdit.cliente || '',
         telefono_cliente: incomeToEdit.telefono_cliente || incomeToEdit.cliente_contacto || '',
-        descripcion_servicio: incomeToEdit.descripcion_servicio || incomeToEdit.concepto || '',
+        descripcion_servicio: incomeToEdit.descripcion_servicio || 'AppSheet',
         logo_url: incomeToEdit.logo_url || (incomeToEdit.cloudinary_url?.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) ? incomeToEdit.cloudinary_url : ''),
+        project_url: incomeToEdit.project_url || incomeToEdit.link_app || '',
+        link_app: incomeToEdit.link_app || incomeToEdit.project_url || '',
+        email_editor: incomeToEdit.email_editor || '',
         // Compatibilidad VS Code
         vscode_url: incomeToEdit.vscode_url || (incomeToEdit.vscode_info?.startsWith('http') ? incomeToEdit.vscode_info : ''),
         vscode_info: incomeToEdit.vscode_info || '',
@@ -97,12 +108,18 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         moneda: incomeToEdit.moneda || 'ARS',
         monto_mensual_ars: incomeToEdit.monto_mensual_ars || incomeToEdit.monto_total || 0,
         dia_vencimiento: incomeToEdit.dia_vencimiento || 10,
+        estado: incomeToEdit.estado || 'activo',
       });
+      if (incomeToEdit.ai_studio_url || incomeToEdit.ai_studio_email) {
+        setTechModality('AI Studio');
+      } else if (incomeToEdit.vscode_url || incomeToEdit.vscode_info) {
+        setTechModality('VSCode');
+      }
     } else {
       setFormData({
         cliente: '',
         telefono_cliente: '',
-        descripcion_servicio: '',
+        descripcion_servicio: 'AppSheet',
         logo_url: '',
         supabase_url: '',
         supabase_email: '',
@@ -119,6 +136,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         moneda: 'ARS',
         monto_mensual_ars: 0,
         dia_vencimiento: 10,
+        estado: 'activo',
         concepto: '',
         monto_total: 0,
         monto_cobrado: 0,
@@ -127,6 +145,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
         metodo_pago: 'Transferencia',
         observaciones: '',
       });
+      setTechModality('AI Studio');
     }
   }, [incomeToEdit, isOpen]);
 
@@ -151,7 +170,6 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
     
     const normalizedData = {
       ...formData,
-      // Tarea 3: Mapeo de compatibilidad
       cliente_contacto: formData.telefono_cliente,
       concepto: formData.descripcion_servicio,
       monto_total: formData.monto_mensual_ars,
@@ -168,222 +186,326 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full h-full sm:h-auto sm:max-w-[600px] sm:rounded-2xl overflow-y-auto p-0 flex flex-col gap-0 border-none sm:border">
-        <div className="p-4 md:p-6 border-b shrink-0 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-6">
+      <DialogContent className="w-full h-full sm:h-auto sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden p-0 flex flex-col gap-0 border-none sm:border shadow-2xl">
+        <div className="p-6 md:p-8 border-b bg-slate-50/50 shrink-0">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-slate-900">
-              {incomeToEdit ? 'Editar Cliente' : 'Nuevo Cliente / Aplicación'}
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Información técnica y comercial del servicio administrado.
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                  {incomeToEdit ? 'Editar Cliente' : 'Nuevo Cliente'}
+                </DialogTitle>
+                <DialogDescription className="text-sm font-medium text-slate-500 mt-1">
+                  Gestiona la información comercial y técnica del servicio.
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('estado', 'activo')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${formData.estado === 'activo' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 'text-slate-400 hover:bg-slate-50'}`}
+                >
+                  Activo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('estado', 'inactivo')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${formData.estado === 'inactivo' ? 'bg-slate-400 text-white shadow-lg shadow-slate-100' : 'text-slate-400 hover:bg-slate-50'}`}
+                >
+                  Inactivo
+                </button>
+              </div>
+            </div>
           </DialogHeader>
         </div>
         <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 modal-scroll pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-6">
+          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 modal-scroll">
             
-            {/* BLOQUE A: DATOS DEL CLIENTE */}
-            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">A. Datos del Cliente</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5 text-left">
-                  <Label htmlFor="cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Nombre / Empresa</Label>
-                  <Input 
-                    id="cliente" 
-                    value={formData.cliente || ''}
-                    onChange={(e) => handleInputChange('cliente', e.target.value)}
-                    required
-                    placeholder="Ej: PlayBook Inc..."
-                    className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5 text-left">
-                  <Label htmlFor="telefono_cliente" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Teléfono</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-                    <Input 
-                      id="telefono_cliente" 
-                      type="tel"
-                      value={formData.telefono_cliente || ''}
-                      onChange={(e) => handleInputChange('telefono_cliente', e.target.value)}
-                      placeholder="+54 9..."
-                      className="bg-white border-slate-200 pl-9 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
-                    />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* IZQUIERDA: COMERCIAL */}
+              <div className="space-y-6">
+                <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-slate-400" />
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">A. Información Comercial</h3>
                   </div>
-                </div>
-              </div>
-            </div>
 
-            {/* BLOQUE B: SERVICIO Y COBRO */}
-            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <DollarSign className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">B. Servicio y Cuota</h3>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-1.5 text-left">
-                  <Label htmlFor="descripcion_servicio" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Descripción / Mantenimiento</Label>
-                  <Input 
-                    id="descripcion_servicio" 
-                    value={formData.descripcion_servicio || ''}
-                    onChange={(e) => handleInputChange('descripcion_servicio', e.target.value)}
-                    required
-                    placeholder="Ej: Administración de App de Gastos..."
-                    className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl shadow-sm text-sm"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5 text-left">
-                    <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Monto Mensual</Label>
-                    <div className="flex gap-2">
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Cliente / Empresa</Label>
+                      <Input 
+                        value={formData.cliente || ''}
+                        onChange={(e) => handleInputChange('cliente', e.target.value)}
+                        required
+                        placeholder="Nombre de la empresa..."
+                        className="h-12 bg-white border-slate-200 rounded-2xl px-4 font-bold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Teléfono (WhatsApp)</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                        <Input 
+                          value={formData.telefono_cliente || ''}
+                          onChange={(e) => handleInputChange('telefono_cliente', e.target.value)}
+                          placeholder="+54 9..."
+                          className="h-12 bg-white border-slate-200 pl-11 rounded-2xl font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Tipo de Servicio</Label>
                       <Select 
-                        value={formData.moneda || 'ARS'} 
-                        onValueChange={(v: 'ARS' | 'USD') => handleMonedaChange(v)}
+                        value={formData.descripcion_servicio || 'AppSheet'} 
+                        onValueChange={(v) => handleInputChange('descripcion_servicio', v)}
                       >
-                        <SelectTrigger className="w-28 sm:w-24 bg-white border-slate-200 rounded-xl font-bold h-11 sm:h-10 shadow-sm text-sm shrink-0">
+                        <SelectTrigger className="h-12 bg-white border-slate-200 rounded-2xl px-4 font-bold">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ARS">ARS</SelectItem>
-                          <SelectItem value="USD">USD</SelectItem>
+                        <SelectContent className="rounded-2xl border-slate-100">
+                          <SelectItem value="AppSheet">AppSheet</SelectItem>
+                          <SelectItem value="App IA">App IA</SelectItem>
+                          <SelectItem value="Asesoría">Asesoría</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Input 
-                        type="number" 
-                        inputMode="decimal"
-                        value={formData.monto_mensual ?? 0}
-                        onChange={(e) => handleMontoMensualChange(parseFloat(e.target.value) || 0)}
-                        required
-                        placeholder="0"
-                        className="bg-white border-slate-200 font-black text-slate-900 rounded-xl h-11 sm:h-10 shadow-sm text-sm"
-                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 p-6 rounded-[2rem] text-white space-y-6">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-slate-400" />
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">B. Plan y Cobro</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Monto Mensual</Label>
+                      <div className="flex gap-2">
+                        <Select 
+                          value={formData.moneda || 'ARS'} 
+                          onValueChange={(v: 'ARS' | 'USD') => handleMonedaChange(v)}
+                        >
+                          <SelectTrigger className="w-24 bg-slate-800 border-slate-700 rounded-xl font-bold h-10 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="ARS">ARS</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          type="number"
+                          value={formData.monto_mensual ?? 0}
+                          onChange={(e) => handleMontoMensualChange(parseFloat(e.target.value) || 0)}
+                          className="h-10 bg-slate-800 border-slate-700 rounded-xl px-4 font-black text-white"
+                        />
+                      </div>
+                    </div>
+                    {formData.moneda === 'USD' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black text-blue-400 uppercase tracking-wider ml-1">Eq. en ARS</Label>
+                        <Input 
+                          type="number"
+                          value={formData.monto_mensual_ars ?? 0}
+                          onChange={(e) => handleInputChange('monto_mensual_ars', parseFloat(e.target.value) || 0)}
+                          className="h-10 bg-blue-900/50 border-blue-800 rounded-xl px-4 font-black text-blue-100"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* DERECHA: TÉCNICO */}
+              <div className="space-y-6">
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Code className="w-5 h-5 text-slate-400" />
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">C. Configuración Técnica</h3>
+                    </div>
+                    <div className="flex bg-slate-50 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setTechModality('AI Studio')}
+                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${techModality === 'AI Studio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}
+                      >
+                        AI Studio
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTechModality('VSCode')}
+                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${techModality === 'VSCode' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}
+                      >
+                        VSCode
+                      </button>
                     </div>
                   </div>
 
-                  {formData.moneda === 'USD' ? (
-                    <div className="space-y-1.5 animation-fade-in text-left">
-                      <Label className="text-[10px] font-bold text-blue-600 uppercase ml-1">Equivalente ARS</Label>
-                      <Input 
-                        type="number" 
-                        inputMode="decimal"
-                        value={formData.monto_mensual_ars ?? 0}
-                        onChange={(e) => handleInputChange('monto_mensual_ars', parseFloat(e.target.value) || 0)}
-                        required
-                        placeholder="Monto en ARS..."
-                        className="bg-blue-50/50 border-blue-100 font-black text-blue-900 rounded-xl h-11 sm:h-10 shadow-sm text-sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-end pb-1 ml-1">
-                      <p className="text-[10px] text-slate-400 italic">Vence día 10</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+                  <div className="space-y-4">
+                    {techModality === 'AI Studio' ? (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">URL Applet AI Studio</Label>
+                          <div className="relative">
+                            <TrendingUp className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
+                            <Input 
+                              value={formData.ai_studio_url || ''}
+                              onChange={(e) => handleInputChange('ai_studio_url', e.target.value)}
+                              placeholder="https://ai.studio/..."
+                              className="h-10 bg-slate-50 border-none pl-11 rounded-xl font-medium text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Email Acceso</Label>
+                          <Input 
+                            value={formData.ai_studio_email || ''}
+                            onChange={(e) => handleInputChange('ai_studio_email', e.target.value)}
+                            placeholder="mail@acceso.com"
+                            list="existing-emails"
+                            className="h-10 bg-slate-50 border-none rounded-xl px-4 font-medium text-xs"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-4">
+                          <div className="p-2 bg-white rounded-xl text-blue-500 shadow-sm">
+                            <Code className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-blue-900 uppercase tracking-tight">Trabajo Local / VSCode</p>
+                            <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">
+                              Modalidad de desarrollo local. Los accesos se gestionan vía GitHub.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Info / Notas VSCode</Label>
+                          <Input 
+                            value={formData.vscode_info || ''}
+                            onChange={(e) => handleInputChange('vscode_info', e.target.value)}
+                            placeholder="Comandos, versión, requisitos..."
+                            className="h-10 bg-slate-50 border-none rounded-xl px-4 font-medium text-xs italic"
+                          />
+                        </div>
+                      </div>
+                    )}
 
-            {/* BLOQUE C: IDENTIDAD */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">C. Identidad Visual</h3>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0 group hover:border-blue-400 transition-all">
-                  {formData.logo_url ? (
-                    <img src={formData.logo_url} alt="Logo Preview" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
-                  ) : (
-                    <Users className="w-8 h-8 sm:w-6 sm:h-6 text-slate-200 group-hover:text-blue-200" />
-                  )}
-                </div>
-                <div className="flex-1 w-full space-y-1.5 text-left">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Logo URL (Cloudinary preferred)</Label>
-                  <Input 
-                    value={formData.logo_url || ''}
-                    onChange={(e) => handleInputChange('logo_url', e.target.value)}
-                    placeholder="https://cloudinary.com/..."
-                    className="bg-slate-50 border-none px-4 h-11 sm:h-10 rounded-xl text-xs"
-                  />
-                </div>
-              </div>
-            </div>
+                    <Separator className="bg-slate-100" />
 
-            {/* BLOQUE D: ACCESOS TÉCNICOS */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-1 pl-1">
-                <Code className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">D. Accesos Técnicos</h3>
-              </div>
-              
-              <datalist id="existing-emails">
-                {existingEmails.map(email => <option key={email} value={email} />)}
-              </datalist>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Database className="w-3 h-3 text-emerald-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase">Supabase</span>
+                        </div>
+                        <Input 
+                          value={formData.supabase_url || ''}
+                          onChange={(e) => handleInputChange('supabase_url', e.target.value)}
+                          placeholder="Link de Supabase"
+                          className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                        />
+                        <Input 
+                          value={formData.supabase_email || ''}
+                          onChange={(e) => handleInputChange('supabase_email', e.target.value)}
+                          placeholder="Mail usado en Supabase"
+                          list="existing-emails"
+                          className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                        />
+                      </div>
 
-              <div className="space-y-2">
-                {[
-                  { id: 'supabase', label: 'Supabase', icon: Database, color: 'text-blue-500', urlField: 'supabase_url', emailField: 'supabase_email' },
-                  { id: 'github', label: 'GitHub', icon: Github, color: 'text-slate-900', urlField: 'github_url', emailField: 'github_email' },
-                  { id: 'aistudio', label: 'AI Studio', icon: TrendingUp, color: 'text-orange-500', urlField: 'ai_studio_url', emailField: 'ai_studio_email' },
-                  { id: 'cloudinary', label: 'Cloudinary', icon: Globe, color: 'text-indigo-500', urlField: 'cloudinary_url', emailField: 'cloudinary_email' },
-                  { id: 'vscode', label: 'VS Code', icon: Code, color: 'text-blue-400', urlField: 'vscode_url', emailField: 'vscode_email' },
-                ].map((row) => (
-                  <div key={row.id} className="flex flex-col gap-2 p-3 sm:p-2 bg-slate-50/70 rounded-2xl sm:rounded-xl border border-slate-100">
-                    <div className="flex items-center gap-2 w-full px-1">
-                      <row.icon className={`w-3.5 h-3.5 ${row.color}`} />
-                      <span className="text-[10px] font-black text-slate-500 uppercase">{row.label}</span>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Github className="w-3 h-3 text-slate-900" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase">GitHub</span>
+                        </div>
+                        <Input 
+                          value={formData.github_url || ''}
+                          onChange={(e) => handleInputChange('github_url', e.target.value)}
+                          placeholder="Link del repositorio"
+                          className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                        />
+                        <Input 
+                          value={formData.github_email || ''}
+                          onChange={(e) => handleInputChange('github_email', e.target.value)}
+                          placeholder="Mail usado en GitHub"
+                          list="existing-emails"
+                          className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                        />
+                      </div>
+
+                      <div className="space-y-3 md:col-span-2">
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-3 h-3 text-blue-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase">Vercel / App publicada</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Input 
+                            value={formData.project_url || formData.link_app || ''}
+                            onChange={(e) => {
+                              handleInputChange('project_url', e.target.value);
+                              handleInputChange('link_app', e.target.value);
+                            }}
+                            placeholder="Link de Vercel / App"
+                            className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                          />
+                          <Input 
+                            value={formData.email_editor || ''}
+                            onChange={(e) => handleInputChange('email_editor', e.target.value)}
+                            placeholder="Mail usado en Vercel"
+                            list="existing-emails"
+                            className="h-8 bg-slate-50 border-none rounded-lg px-3 text-[10px]"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-slate-400" />
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">D. Identidad</h3>
+                  </div>
+                  <div className="flex gap-4 items-center">
+                    <div className="w-20 h-20 rounded-3xl bg-white border border-slate-100 shadow-sm p-3 flex items-center justify-center overflow-hidden shrink-0">
+                      {formData.logo_url ? (
+                        <img src={formData.logo_url} alt="Logo Preview" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                      ) : (
+                        <Users className="w-8 h-8 text-slate-200" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Logo URL</Label>
                       <Input 
-                        value={formData[row.urlField as keyof IncomeInput] || ''}
-                        onChange={(e) => handleInputChange(row.urlField as keyof IncomeInput, e.target.value)}
-                        placeholder="URL Proyecto"
-                        className="flex-1 bg-white border-slate-200 h-10 sm:h-8 text-[11px] rounded-xl sm:rounded-lg"
-                      />
-                      <Input 
-                        value={formData[row.emailField as keyof IncomeInput] || ''}
-                        onChange={(e) => handleInputChange(row.emailField as keyof IncomeInput, e.target.value)}
-                        placeholder="Email Acceso"
-                        list="existing-emails"
-                        className="flex-1 bg-white border-slate-200 h-10 sm:h-8 text-[11px] rounded-xl sm:rounded-lg"
+                        value={formData.logo_url || ''}
+                        onChange={(e) => handleInputChange('logo_url', e.target.value)}
+                        placeholder="Link a imagen..."
+                        className="h-10 bg-white border-slate-200 rounded-xl px-4 text-[10px]"
                       />
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* BLOQUE E: NOTAS INTERNAS */}
-            <div className="bg-slate-50/30 p-4 rounded-2xl border border-slate-100 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Info className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E. Notas e Información Local</h3>
-              </div>
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="vscode_info" className="text-[10px] font-bold text-slate-500 uppercase ml-1">Comandos / Notas</Label>
-                <Input 
-                  id="vscode_info" 
-                  value={formData.vscode_info || ''}
-                  onChange={(e) => handleInputChange('vscode_info', e.target.value)}
-                  placeholder="Ruta local, comandos de inicio, notas..."
-                  className="bg-white border-slate-200 px-4 h-11 sm:h-10 rounded-xl text-sm italic"
-                />
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-4 md:p-6 border-t shrink-0 flex items-center gap-3 bg-white pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6">
-            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl font-bold text-slate-400 flex-1 sm:flex-none">
+          <div className="p-6 md:p-8 border-t shrink-0 flex items-center justify-between bg-white">
+            <Button type="button" variant="ghost" onClick={onClose} className="rounded-2xl font-bold text-slate-400 h-10 px-6">
               Cancelar
             </Button>
-            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-xl h-12 sm:h-10 px-8 flex-1 font-black uppercase tracking-tight shadow-xl shadow-slate-200">
-              {incomeToEdit ? 'Guardar' : 'Registrar'}
+            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-2xl h-12 px-12 font-black uppercase tracking-tight shadow-xl shadow-slate-200 transition-all active:scale-95">
+              {incomeToEdit ? 'Guardar Cambios' : 'Registrar Cliente'}
             </Button>
           </div>
         </form>
+        <datalist id="existing-emails">
+          {existingEmails.map(email => <option key={email} value={email} />)}
+        </datalist>
       </DialogContent>
     </Dialog>
   );

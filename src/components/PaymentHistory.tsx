@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { GastoPagoHistorial, Expense } from '../types';
+import React, { useState, useMemo } from 'react';
+import { GastoPagoHistorial, Expense, PaymentStatus } from '../types';
 import {
   Table,
   TableBody,
@@ -12,89 +12,27 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
   Search,
+  Filter,
+  Trash2,
+  Edit2,
+  ExternalLink,
+  History as HistoryIcon,
+  Archive,
+  RotateCcw,
   Calendar,
-  FileText,
-  User,
   CreditCard,
-  Hash,
-  Folder,
+  Tag,
   ChevronDown,
   ChevronRight,
-  Zap,
-  AlertTriangle,
+  TrendingDown,
   Clock,
-  Edit2,
-  History as HistoryIcon,
-  RotateCcw,
-  Archive,
-  ArchiveRestore,
-  Trash2
+  CheckCircle2,
+  FileText
 } from 'lucide-react';
-import { format, isWithinInterval, parseISO, addMonths, startOfMonth, differenceInMonths, isValid } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
-import { generateExpenseOccurrences } from '../utils/expenseLogic';
-
-const StatusFilterButton = ({ 
-  label, 
-  count, 
-  active, 
-  onClick,
-  colorClass
-}: { 
-  label: string; 
-  count: number; 
-  active: boolean; 
-  onClick: () => void;
-  colorClass: 'blue' | 'emerald' | 'amber' | 'rose';
-}) => {
-  const colorMaps = {
-    blue: active ? 'bg-blue-600 text-white shadow-blue-100 border-blue-600' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100',
-    emerald: active ? 'bg-emerald-600 text-white shadow-emerald-100 border-emerald-600' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100',
-    amber: active ? 'bg-amber-500 text-white shadow-amber-100 border-amber-500' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100',
-    rose: active ? 'bg-rose-600 text-white shadow-rose-100 border-rose-600' : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-100',
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2 border shadow-sm ${colorMaps[colorClass]}`}
-    >
-      {label}
-      <span className={`px-1.5 py-0.5 rounded-lg text-[10px] ${active ? 'bg-white/20' : 'bg-white shadow-sm'}`}>
-        {count}
-      </span>
-    </button>
-  );
-};
-
-// Helpers locales para blindaje de fechas
-const safeParseDate = (dateStr: string | null | undefined): Date | null => {
-  if (!dateStr) return null;
-  try {
-    const parsed = parseISO(dateStr);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  } catch {
-    return null;
-  }
-};
-
-const getSafeTimestamp = (dateStr: string | null | undefined): number => {
-  const date = safeParseDate(dateStr);
-  return date ? date.getTime() : 0;
-};
-
-const formatSafeDate = (dateStr: string, formatStr: string, options?: any): string => {
-  const date = safeParseDate(dateStr);
-  if (!date) return 'N/A';
-  return format(date, formatStr, options);
-};
 
 interface PaymentHistoryProps {
   history: GastoPagoHistorial[];
@@ -102,39 +40,15 @@ interface PaymentHistoryProps {
   onActionPayment: (expense: Expense) => void;
   onEdit: (expense: Expense) => void;
   onShowHistory: (expense: Expense) => void;
-  onTogglePayment: (id: string, currentStatus: any) => void;
-  onToggleArchive?: (id: string, archived: boolean) => void;
-  onDeletePayment?: (pagoId: string) => void;
-  onDeleteExpense?: (expenseId: string) => void;
+  onTogglePayment: (id: string, status: PaymentStatus) => void;
+  onToggleArchive: (id: string, archived: boolean) => void;
+  onDeletePayment: (id: string) => void;
+  onDeleteExpense: (id: string) => void;
 }
 
-interface UnifiedItem extends Partial<GastoPagoHistorial> {
-  id: string;
-  sourceType: 'payment' | 'expense';
-  status: 'pagado' | 'pendiente' | 'vencido' | 'por_vencer';
-  fecha_pago: string; // Used for unified sorting and filtering
-  servicio_clave: string;
-  categoria_snapshot: string;
-  responsable_snapshot: string;
-  monto_pagado: number;
-  forma_pago: string;
-  referencia_pago: string;
-  originalExpense?: Expense;
-  archived?: boolean;
-}
-
-interface HistoryGroup {
-  key: string;
-  label: string;
-  year: number;
-  month: number;
-  items: UnifiedItem[];
-  total: number;
-}
-
-export function PaymentHistory({ 
-  history, 
-  expenses, 
+export const PaymentHistory: React.FC<PaymentHistoryProps> = ({
+  history = [],
+  expenses = [],
   onActionPayment,
   onEdit,
   onShowHistory,
@@ -142,874 +56,295 @@ export function PaymentHistory({
   onToggleArchive,
   onDeletePayment,
   onDeleteExpense
-}: PaymentHistoryProps) {
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState('Todos');
-  const [selectedResponsible, setSelectedResponsible] = useState('Todos');
-  const [selectedCategory, setSelectedCategory] = useState('Todos');
-  const [activeStatusFilter, setActiveStatusFilter] = useState<'Todos' | 'pagado' | 'no_pagado'>('Todos');
-  const [visibilityFilter, setVisibilityFilter] = useState<'Activos' | 'Archivados'>('Activos');
-  const [sortConfig, setSortConfig] = useState<{
-    key: 'fecha_pago' | 'monto_pagado';
-    direction: 'asc' | 'desc';
-  } | null>({ key: 'fecha_pago', direction: 'desc' });
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [groupBy, setGroupBy] = useState<'none' | 'month' | 'category'>('month');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['all']));
 
-  const itemsUnificados = useMemo<UnifiedItem[]>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const toggleGroup = (groupId: string) => {
+    const next = new Set(expandedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    setExpandedGroups(next);
+  };
 
-    // 1. Registros provenientes del historial de pagos (Pagos reales e individuales)
-    const historyItems: UnifiedItem[] = history.map(h => {
-      const originalExpense = expenses.find(e => e.id === h.gasto_id);
-      
-      return {
-        ...h,
-        sourceType: 'payment', // Campo clave para identificar un pago real del historial
-        status: 'pagado',
-        fecha_pago: h.fecha_pago,
-        servicio_clave: h.servicio_clave,
-        categoria_snapshot: h.categoria_snapshot,
-        responsable_snapshot: h.responsable_snapshot,
-        monto_pagado: h.monto_pagado,
-        forma_pago: h.forma_pago || 'N/A',
-        referencia_pago: h.referencia_pago || '',
-        originalExpense,
-        archived: originalExpense?.archived || false
-      };
-    });
-
-          const gapItems: UnifiedItem[] = [];
-          const todayStart = startOfMonth(new Date());
-          let vencidosCount = 0;
-
-          expenses.forEach(e => {
-            const occurrences = generateExpenseOccurrences(e, new Date());
-
-            occurrences.forEach(current => {
-              const year = current.getFullYear();
-              const month = current.getMonth() + 1;
-
-              const isPaid = history.some(h => 
-                h.gasto_id === e.id && 
-                h.periodo_anio === year && 
-                h.periodo_mes === month
-              );
-
-              if (!isPaid) {
-                const todayLocal = new Date();
-                todayLocal.setHours(0, 0, 0, 0);
-                const diaActual = todayLocal.getDate();
-                const isSameMonth = current.getFullYear() === todayLocal.getFullYear() && current.getMonth() === todayLocal.getMonth();
-
-                let status: 'vencido' | 'por_vencer' | 'pendiente' = 'pendiente';
-                const todayStart = startOfMonth(new Date());
-                
-                if (current < todayStart) {
-                  status = 'vencido';
-                } else if (isSameMonth) {
-                  const diaVenc = e.dia_vencimiento;
-                  if (diaVenc === null || diaVenc === undefined) {
-                    status = 'por_vencer';
-                  } else if (diaActual >= diaVenc) {
-                    status = 'vencido';
-                  } else {
-                    status = 'por_vencer';
-                  }
-                }
-
-                if (status === 'vencido') vencidosCount++;
-
-                gapItems.push({
-                  id: `gap-${e.id}-${year}-${month}`,
-                  sourceType: 'expense',
-                  status,
-                  fecha_pago: format(current, 'yyyy-MM-dd'),
-                  servicio_clave: e.subcategoria,
-                  categoria_snapshot: e.categoria,
-                  subcategoria_snapshot: e.subcategoria,
-                  responsable_snapshot: e.responsable,
-                  monto_pagado: e.monto,
-                  forma_pago: 'Faltante',
-                  referencia_pago: `Período ${month}/${year}`,
-                  originalExpense: e,
-                  archived: e.archived || false
-                });
-              }
-            });
-          });
-
-          console.log(`[AUDITORIA_VENCIDOS] TOTAL_GAPS: ${gapItems.length} | VENCIDOS_DETECTADOS: ${vencidosCount}`);
-          const unified = [...historyItems, ...gapItems];
-          return unified;
-  }, [history, expenses]);
-
-  const responsibles = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.responsable_snapshot).filter(r => r && r !== 'Todos')))],
-    [itemsUnificados]
-  );
-
-  const categories = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.categoria_snapshot).filter(c => c && c !== 'Todos')))],
-    [itemsUnificados]
-  );
-
-  const methods = useMemo(
-    () => ['Todos', ...Array.from(new Set(itemsUnificados.map(h => h.forma_pago).filter(m => m && m !== 'Todos')))],
-    [itemsUnificados]
-  );
-
-  // 1. Filtrado Base (Global: Visibilidad + Secundarios: Búsqueda, Filtros, Fechas)
-  const basePool = useMemo(() => {
-    return itemsUnificados.filter(item => {
-      // Filtro de Visibilidad (Archivados vs Activos) - Prioridad global
-      const matchesVisibility = visibilityFilter === 'Activos' ? !item.archived : item.archived;
-      if (!matchesVisibility) return false;
-
-      // Filtros Secundarios
-      const matchesSearch =
-        (item.servicio_clave || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.gasto_concepto_snapshot || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.subcategoria_snapshot || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.referencia_pago || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.entidad_pago || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesResponsible =
-        selectedResponsible === 'Todos' || item.responsable_snapshot === selectedResponsible;
-      const matchesCategory =
-        selectedCategory === 'Todos' || item.categoria_snapshot === selectedCategory;
-      const matchesMethod =
-        selectedMethod === 'Todos' || item.forma_pago === selectedMethod;
-
-      let matchesDate = true;
-      if (dateFrom || dateTo) {
-        const itemDate = safeParseDate(item.fecha_pago);
-        if (!itemDate) {
-          matchesDate = false;
-        } else {
-          const start = dateFrom ? parseISO(dateFrom) : new Date(0);
-          const end = dateTo ? parseISO(dateTo) : new Date(2100, 0, 1);
-          if (dateTo) {
-            end.setHours(23, 59, 59, 999);
-          }
-          matchesDate = itemDate >= start && itemDate <= end;
-        }
-      }
-
-      return matchesSearch && matchesResponsible && matchesCategory && matchesMethod && matchesDate;
-    });
-  }, [itemsUnificados, visibilityFilter, searchTerm, selectedResponsible, selectedCategory, selectedMethod, dateFrom, dateTo]);
-
-  // 2. Cálculo de Badges basado en el Pool Filtrado
-  const statusCounts = useMemo(() => {
-    return {
-      Todos: basePool.length,
-      pagado: basePool.filter(i => i.status === 'pagado').length,
-      no_pagado: basePool.filter(i => i.status !== 'pagado').length,
-    };
-  }, [basePool]);
-
-  // 3. Resultado Final Filtrado por Tab (Status) y Ordenado
   const filteredHistory = useMemo(() => {
-    const statusFiltered = basePool.filter(item => {
-      if (activeStatusFilter === 'Todos') return true;
-      if (activeStatusFilter === 'pagado') return item.status === 'pagado';
-      if (activeStatusFilter === 'no_pagado') return item.status !== 'pagado';
-      return true;
+    return history.filter(item => {
+      const concept = (item.gasto_concepto_snapshot || '').toLowerCase();
+      const subcat = (item.subcategoria_snapshot || '').toLowerCase();
+      const entity = (item.entidad_pago || '').toLowerCase();
+      const search = searchTerm.toLowerCase();
+
+      return concept.includes(search) || 
+             subcat.includes(search) || 
+             entity.includes(search) ||
+             item.periodo_anio.toString().includes(search);
+    }).sort((a, b) => {
+      // Sort by date descending
+      return b.fecha_pago.localeCompare(a.fecha_pago);
     });
+  }, [history, searchTerm]);
 
-    const itemsFinales = statusFiltered;
+  const groupedHistory = useMemo(() => {
+    if (groupBy === 'none') return { 'Todos los registros': filteredHistory };
 
-    console.log("BADGE_NO_PAGADOS_COUNT:", statusCounts.no_pagado);
-    console.log("LISTA_BASE_COUNT:", itemsUnificados.length);
-    console.log("LISTA_TRAS_FILTROS_SECUNDARIOS:", basePool.length);
-    console.log("LISTA_TRAS_FILTRO_TAB:", statusFiltered.length);
-    console.log("LISTA_TRAS_FILTRO_TEXTO:", searchTerm ? `Buscando: ${searchTerm}` : "N/A");
-    console.log("LISTA_TRAS_FILTRO_PAGO:", selectedMethod);
-    console.log("LISTA_TRAS_FILTRO_RESPONSABLE:", selectedResponsible);
-    console.log("LISTA_FINAL_RENDER:", itemsFinales.length);
+    const groups: Record<string, GastoPagoHistorial[]> = {};
 
-    console.log("FILTRO_HISTORIAL_MOVIMIENTOS:", activeStatusFilter);
-    console.log("FILTRO_VISIBILIDAD:", visibilityFilter);
-
-    return itemsFinales.sort((a, b) => {
-      if (!sortConfig) return 0;
-      const { key, direction } = sortConfig;
-      let comparison = 0;
-
-      if (key === 'fecha_pago') {
-        comparison = getSafeTimestamp(a.fecha_pago) - getSafeTimestamp(b.fecha_pago);
-      } else {
-        comparison = (a.monto_pagado || 0) - (b.monto_pagado || 0);
+    filteredHistory.forEach(item => {
+      let key = '';
+      if (groupBy === 'month') {
+        // Formato: "Octubre 2024"
+        const date = new Date(item.periodo_anio, item.periodo_mes - 1);
+        key = format(date, 'MMMM yyyy', { locale: es });
+      } else if (groupBy === 'category') {
+        key = item.categoria_snapshot || 'Sin categoría';
       }
 
-      return direction === 'asc' ? comparison : -comparison;
-    });
-  }, [
-    basePool,
-    statusCounts,
-    activeStatusFilter,
-    sortConfig,
-    visibilityFilter,
-    searchTerm,
-    selectedMethod,
-    selectedResponsible,
-    itemsUnificados.length
-  ]);
-
-  const groupedHistory = useMemo<HistoryGroup[]>(() => {
-    const groups = new Map<string, HistoryGroup>();
-
-    filteredHistory.forEach((item) => {
-      const parsedDate = safeParseDate(item.fecha_pago);
-      const year = parsedDate ? parsedDate.getFullYear() : 0;
-      const month = parsedDate ? parsedDate.getMonth() : -1;
-      const key = parsedDate ? `${year}-${String(month + 1).padStart(2, '0')}` : 'sin-fecha';
-      const label = parsedDate
-        ? format(parsedDate, 'MMMM yyyy', { locale: es })
-        : 'Sin fecha';
-
-      if (!groups.has(key)) {
-        groups.set(key, {
-          key,
-          label,
-          year,
-          month,
-          items: [],
-          total: 0,
-        });
-      }
-
-      const group = groups.get(key)!;
-      group.items.push(item);
-      group.total += item.monto_pagado || 0;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
     });
 
-    return Array.from(groups.values()).sort((a, b) => {
-      if (a.key === 'sin-fecha') return 1;
-      if (b.key === 'sin-fecha') return -1;
+    return groups;
+  }, [filteredHistory, groupBy]);
 
-      if (a.year !== b.year) return b.year - a.year;
-      return b.month - a.month;
-    });
-  }, [filteredHistory]);
-
-  useEffect(() => {
-    const now = new Date();
-    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    setOpenGroups(prev => {
-      const next: Record<string, boolean> = {};
-
-      groupedHistory.forEach((group, index) => {
-        if (prev[group.key] !== undefined) {
-          next[group.key] = prev[group.key];
-        } else {
-          next[group.key] = group.key === currentKey || (index === 0 && currentKey !== group.key);
-        }
-      });
-
-      return next;
-    });
-  }, [groupedHistory]);
-
-  const totalFiltered = useMemo(
-    () => filteredHistory.reduce((sum, h) => sum + h.monto_pagado, 0),
-    [filteredHistory]
-  );
-
-  const handleSort = (key: 'fecha_pago' | 'monto_pagado') => {
-    setSortConfig(prev => {
-      if (prev?.key === key) {
-        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      }
-      return { key, direction: 'desc' };
-    });
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = parseISO(dateStr);
+      return format(date, 'dd MMM, yyyy', { locale: es });
+    } catch {
+      return dateStr;
+    }
   };
 
-  const clearFilters = () => {
-    setSearchTerm('');
-    setSelectedCategory('Todos');
-    setSelectedMethod('Todos');
-    setSelectedResponsible('Todos');
-    setDateFrom('');
-    setDateTo('');
-    setActiveStatusFilter('Todos');
-    setVisibilityFilter('Activos');
-  };
-
-  const handleToggleArchive = (item: UnifiedItem) => {
-    if (!onToggleArchive || !item.originalExpense) return;
-    const expenseId = item.id.startsWith('exp-') ? item.id.replace('exp-', '') : item.gasto_id;
-    if (!expenseId) return;
-    const nuevoArchived = !item.archived;
-    
-    console.log("ARCHIVAR_GASTO_ID:", expenseId);
-    console.log("ARCHIVAR_NUEVO_VALOR:", nuevoArchived);
-    
-    onToggleArchive(expenseId, nuevoArchived);
-  };
-
-  const toggleGroup = (key: string) => {
-    setOpenGroups(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+  const getExpenseForPayment = (payment: GastoPagoHistorial) => {
+    return expenses.find(e => e.id === payment.gasto_id);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Historial de movimientos</h2>
-          <p className="text-slate-500 text-sm font-medium">
-            Consulta y gestiona todos tus gastos, pagos y vencimientos en un solo lugar.
-          </p>
+      {/* Header & Filters */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-96">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Buscar en el historial..."
+            className="pl-10 bg-white border-slate-200 rounded-2xl h-11 transition-all focus:ring-2 focus:ring-indigo-500/20"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-        <div className="flex gap-3">
-          <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">
-              Total Filtrado
-            </p>
-            <p className="text-lg font-black text-emerald-600 leading-none">
-              ${totalFiltered.toLocaleString()}
-            </p>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">
-              Pagos
-            </p>
-            <p className="text-lg font-black text-slate-900 leading-none">
-              {filteredHistory.length}
-            </p>
-          </div>
+
+        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl">
+          <Button
+            variant={groupBy === 'month' ? 'secondary' : 'ghost'}
+            size="sm"
+            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'month' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
+            onClick={() => setGroupBy('month')}
+          >
+            Por Mes
+          </Button>
+          <Button
+            variant={groupBy === 'category' ? 'secondary' : 'ghost'}
+            size="sm"
+            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'category' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
+            onClick={() => setGroupBy('category')}
+          >
+            Por Categoría
+          </Button>
+          <Button
+            variant={groupBy === 'none' ? 'secondary' : 'ghost'}
+            size="sm"
+            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'none' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
+            onClick={() => setGroupBy('none')}
+          >
+            Lista Plana
+          </Button>
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-        {/* Filtros de Nivel 1: Estado y Visibilidad */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap gap-2">
-            <StatusFilterButton 
-              label="Todos" 
-              count={statusCounts.Todos} 
-              active={activeStatusFilter === 'Todos'} 
-              onClick={() => setActiveStatusFilter('Todos')}
-              colorClass="blue"
-            />
-            <StatusFilterButton 
-              label="Pagados" 
-              count={statusCounts.pagado} 
-              active={activeStatusFilter === 'pagado'} 
-              onClick={() => setActiveStatusFilter('pagado')}
-              colorClass="emerald"
-            />
-            <StatusFilterButton 
-              label="No pagados" 
-              count={statusCounts.no_pagado} 
-              active={activeStatusFilter === 'no_pagado'} 
-              onClick={() => setActiveStatusFilter('no_pagado')}
-              colorClass="amber"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
-              <button
-                onClick={() => setVisibilityFilter('Activos')}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                  visibilityFilter === 'Activos'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Activos
-              </button>
-              <button
-                onClick={() => setVisibilityFilter('Archivados')}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                  visibilityFilter === 'Archivados'
-                    ? 'bg-white text-rose-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Archivados
-              </button>
+      {/* Statistics Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Pagado', value: filteredHistory.reduce((sum, item) => sum + item.monto_pagado, 0), icon: CreditCard, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+          { label: 'Transacciones', value: filteredHistory.length, icon: HistoryIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Mes Actual', value: filteredHistory.filter(i => i.periodo_mes === new Date().getMonth() + 1 && i.periodo_anio === new Date().getFullYear()).reduce((sum, item) => sum + item.monto_pagado, 0), icon: Calendar, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Promedio', value: Math.round(filteredHistory.length > 0 ? filteredHistory.reduce((sum, item) => sum + item.monto_pagado, 0) / filteredHistory.length : 0), icon: TrendingDown, color: 'text-purple-600', bg: 'bg-purple-50' }
+        ].map((stat, i) => (
+          <div key={i} className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className={`p-3 ${stat.bg} rounded-2xl`}>
+              <stat.icon className={`w-5 h-5 ${stat.color}`} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{stat.label}</p>
+              <p className="text-xl font-black text-slate-900 leading-none">
+                {stat.label.includes('Transacciones') ? stat.value : `$${stat.value.toLocaleString()}`}
+              </p>
             </div>
           </div>
-        </div>
-
-        {/* Filtros de Nivel 2: Metadatos (Buscador, Fecha, Modo, Responsable, Tipo) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-5 border-t border-slate-100">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Buscar concepto..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-10 bg-slate-50/50 border-slate-200 focus:bg-white transition-all text-[11px] font-bold"
-            />
-          </div>
-
-          <div className="w-full">
-            <Popover>
-              <PopoverTrigger className="w-full">
-                <div 
-                  className={`w-full h-10 px-3 flex items-center justify-start text-left font-bold text-[10.5px] bg-slate-50/50 border border-slate-200 rounded-lg hover:bg-slate-100 cursor-pointer transition-all ${(!dateFrom && !dateTo) ? 'text-slate-400' : 'text-blue-600 border-blue-200 bg-blue-50/50'}`}
-                >
-                  <Calendar className="mr-2 h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">
-                    {(!dateFrom && !dateTo) ? 'Rango de fechas' : `${dateFrom ? format(parseISO(dateFrom), 'dd/MM/yy') : '..'} - ${dateTo ? format(parseISO(dateTo), 'dd/MM/yy') : '..'}`}
-                  </span>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-4 rounded-2xl shadow-xl border-slate-200" align="start">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rango de fechas</h4>
-                    {(dateFrom || dateTo) && (
-                      <button 
-                        onClick={() => { setDateFrom(''); setDateTo(''); }}
-                        className="text-[9px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-600"
-                      >
-                        Limpiar
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider ml-1">Desde</label>
-                      <Input
-                        type="date"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                        className="h-9 text-xs bg-slate-50/50 border-slate-200"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider ml-1">Hasta</label>
-                      <Input
-                        type="date"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                        className="h-9 text-xs bg-slate-50/50 border-slate-200"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <select
-            value={selectedMethod}
-            onChange={(e) => setSelectedMethod(e.target.value)}
-            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
-          >
-            {methods.map(m => (
-              <option key={m} value={m}>
-                {m === 'Todos' ? 'Pago: Todos' : m}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedResponsible}
-            onChange={(e) => setSelectedResponsible(e.target.value)}
-            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
-          >
-            {responsibles.map(r => (
-              <option key={r} value={r}>
-                {r === 'Todos' ? 'Responsable: Todos' : r}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="h-10 rounded-md border border-slate-200 bg-slate-50/50 px-3 text-[10.5px] font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer appearance-none hover:bg-slate-100 transition-colors"
-          >
-            {categories.map(c => (
-              <option key={c} value={c}>
-                {c === 'Todos' ? 'Tipo: Todos' : c}
-              </option>
-            ))}
-          </select>
-        </div>
+        ))}
       </div>
 
-      <div className="space-y-5">
-        <AnimatePresence mode="popLayout">
-          {groupedHistory.length > 0 ? (
-            groupedHistory.map((group) => {
-              const isOpen = !!openGroups[group.key];
+      {/* Main Content */}
+      <div className="space-y-4 pb-20">
+        {(Object.entries(groupedHistory) as [string, GastoPagoHistorial[]][]).map(([groupName, items]) => {
+          const isExpanded = expandedGroups.has(groupName) || items.length < 5;
+          const groupTotal = items.reduce((sum, i) => sum + i.monto_pagado, 0);
 
-              return (
-                <motion.div
-                  key={group.key}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 bg-slate-50 border-b border-slate-200 hover:bg-slate-100/70 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-blue-50">
-                        <Folder className="w-4 h-4 text-blue-600" />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isOpen ? (
-                          <ChevronDown className="w-4 h-4 text-slate-500" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-500" />
-                        )}
-
-                        <div>
-                          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                            {group.label}
-                          </h3>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            {group.items.length} pago{group.items.length !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">
-                        Total del mes
-                      </p>
-                      <p className="text-base font-black text-slate-900 leading-none">
-                        ${group.total.toLocaleString()}
-                      </p>
-                    </div>
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {isOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="md:hidden divide-y divide-slate-100">
-                          {group.items.map((h) => (
-                            <motion.div
-                              key={h.id}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="p-4 space-y-3"
-                              onClick={() => {
-                                if (h.originalExpense) {
-                                  onShowHistory(h.originalExpense);
-                                }
-                              }}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="space-y-1 overflow-hidden">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-black text-slate-900">
-                                      {formatSafeDate(h.fecha_pago, "dd/MM/yyyy")}
-                                    </span>
-                                    <Badge variant="outline" className="text-[8px] font-bold px-1.5 py-0 border-slate-200 text-slate-500 uppercase truncate">
-                                      {h.categoria_snapshot}
-                                    </Badge>
-                                  </div>
-                                  <h4 className="text-sm font-black text-slate-900 line-clamp-1">
-                                    {h.subcategoria_snapshot || h.servicio_clave}
-                                  </h4>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <span className="text-sm font-black text-slate-900">${h.monto_pagado.toLocaleString()}</span>
-                                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{h.forma_pago}</div>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-50">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1 truncate">
-                                    <User className="w-2.5 h-2.5" /> {h.responsable_snapshot}
-                                  </span>
-                                  {h.archived && (
-                                    <Badge className="bg-rose-100 text-rose-700 border-none text-[8px] font-black px-1.5 h-4 shrink-0">
-                                      Archivado
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                                  {h.originalExpense && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400" onClick={() => onEdit(h.originalExpense!)}>
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  )}
-                                  {h.sourceType === 'payment' && onDeletePayment && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-300 hover:text-red-500" onClick={() => onDeletePayment(h.id)}>
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
-                        </div>
-
-                        <div className="hidden md:block">
-                          <Table>
-                          <TableHeader className="bg-slate-50">
-                            <TableRow>
-                              <TableHead
-                                className="text-[10px] font-black uppercase tracking-widest text-slate-400 cursor-pointer hover:text-blue-600 py-4 pl-6"
-                                onClick={() => handleSort('fecha_pago')}
-                              >
-                                <div className="flex items-center gap-1">
-                                  Fecha {sortConfig?.key === 'fecha_pago' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                                </div>
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 py-4">
-                                Detalle / Origen
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 py-4 text-center">
-                                Método
-                              </TableHead>
-                              <TableHead
-                                className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer hover:text-blue-600 py-4"
-                                onClick={() => handleSort('monto_pagado')}
-                              >
-                                <div className="flex items-center justify-end gap-1">
-                                  Monto {sortConfig?.key === 'monto_pagado' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                                </div>
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right py-4 pr-6">
-                                Comprobante
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-
-                          <TableBody>
-                            {group.items.map((h) => (
-                              <motion.tr
-                                key={h.id}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="group hover:bg-slate-50/50 transition-colors"
-                              >
-                                <TableCell className="py-5 pl-6">
-                                  <div className="text-[11px] font-black text-slate-900 leading-tight">
-                                    {formatSafeDate(h.fecha_pago, "dd 'de' MMM", { locale: es })}
-                                  </div>
-                                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">
-                                    {formatSafeDate(h.fecha_pago, 'yyyy')}
-                                  </div>
-                                </TableCell>
-
-                                <TableCell className="py-5">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-bold text-slate-900 text-sm">
-                                      {h.subcategoria_snapshot || h.servicio_clave || 'Sin detalle'}
-                                    </span>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[8px] font-bold px-1.5 py-0 border-slate-200 text-slate-500 uppercase h-4"
-                                      >
-                                        {h.categoria_snapshot}
-                                      </Badge>
-                                      {h.archived && (
-                                        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-none text-[8px] font-black uppercase tracking-widest px-1.5 h-4">
-                                          Archivado
-                                        </Badge>
-                                      )}
-                                      <span className="text-slate-300 text-[8px]">•</span>
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1">
-                                        <User className="w-2.5 h-2.5" /> {h.responsable_snapshot}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </TableCell>
-
-                                <TableCell className="py-5 text-center">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <div className="flex items-center gap-1.5 text-slate-600 font-bold text-[10px] uppercase">
-                                      <CreditCard className="w-3 h-3 text-slate-400" />
-                                      {h.forma_pago}
-                                    </div>
-                                    {h.referencia_pago && (
-                                      <div className="flex items-center gap-1 text-[8px] text-slate-400 font-medium">
-                                        <Hash className="w-2 h-2" /> {h.referencia_pago}
-                                      </div>
-                                    )}
-                                  </div>
-                                </TableCell>
-
-                                <TableCell className="py-5 text-right font-black text-slate-900 text-sm">
-                                  ${h.monto_pagado.toLocaleString()}
-                                </TableCell>
-
-                                <TableCell className="py-5 text-right pr-6">
-                                  <div className="flex items-center justify-end gap-2">
-                                    {/* Botones de Gestión (Edit/Delete/History) */}
-                                    <div className="flex items-center gap-1 mr-2 px-2 border-r border-slate-100">
-                                      {h.originalExpense && (
-                                        <>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                                            onClick={() => h.originalExpense && onShowHistory(h.originalExpense)}
-                                            title="Ver historial de este gasto"
-                                          >
-                                            <HistoryIcon className="w-3.5 h-3.5" />
-                                          </Button>
-
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                                            onClick={() => {
-                                              if (h.sourceType === 'payment' && onDeletePayment) {
-                                                onDeletePayment(h.id);
-                                              } else if (h.sourceType === 'expense' && onDeleteExpense) {
-                                                onDeleteExpense(h.originalExpense!.id);
-                                              }
-                                            }}
-                                            title="Eliminar este registro"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </Button>
-                                          
-                                          {onToggleArchive && (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className={`h-7 w-7 rounded-lg ${
-                                                h.archived 
-                                                  ? 'hover:bg-blue-50 text-blue-400 hover:text-blue-600' 
-                                                  : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'
-                                              }`}
-                                              onClick={() => handleToggleArchive(h)}
-                                              title={h.archived ? "Restaurar movimiento" : "Archivar movimiento"}
-                                            >
-                                              {h.archived ? (
-                                                <ArchiveRestore className="w-3.5 h-3.5" />
-                                              ) : (
-                                                <Archive className="w-3.5 h-3.5" />
-                                              )}
-                                            </Button>
-                                          )}
-
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50"
-                                            onClick={() => h.originalExpense && onEdit(h.originalExpense)}
-                                            title="Editar movimiento"
-                                          >
-                                            <Edit2 className="w-3.5 h-3.5" />
-                                          </Button>
-                                          {h.status === 'pagado' && h.sourceType === 'expense' && (
-                                            <div 
-                                              className="h-7 w-7 flex items-center justify-center text-slate-300"
-                                              title="Este registro corresponde al gasto original, no a un pago individual"
-                                            >
-                                              <Clock className="w-3.5 h-3.5 opacity-50" />
-                                            </div>
-                                          )}
-                                          {h.status === 'pagado' && (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"
-                                              onClick={() => h.originalExpense && onTogglePayment(h.originalExpense.id, h.originalExpense.estado_pago)}
-                                              title="Marcar como pendiente"
-                                            >
-                                              <RotateCcw className="w-3.5 h-3.5" />
-                                            </Button>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-
-                                    {/* Botón de Comprobante / Pagar */}
-                                    {h.status === 'pagado' ? (
-                                      (h.comprobante_transformado_url || h.comprobante_cloudinary_secure_url) ? (
-                                        <a
-                                          href={h.comprobante_transformado_url || h.comprobante_cloudinary_secure_url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                                          title="Ver comprobante"
-                                        >
-                                          <FileText className="w-4 h-4" />
-                                        </a>
-                                      ) : (
-                                        <div 
-                                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600"
-                                          title="Pagado (Sin doc)"
-                                        >
-                                          <FileText className="w-4 h-4" />
-                                        </div>
-                                      )
-                                    ) : (
-                                      <div className="flex items-center justify-end gap-2">
-                                        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none text-[8px] font-black uppercase tracking-widest px-2">
-                                          No pagado
-                                        </Badge>
-                                        <Button
-                                          size="sm"
-                                          onClick={() => h.originalExpense && onActionPayment(h.originalExpense)}
-                                          className="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-tight gap-1.5"
-                                        >
-                                          {h.status === 'vencido' ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />} Pagar
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </motion.tr>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                </motion.div>
-              );
-            })
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <div className="py-20 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 bg-slate-50 rounded-full">
-                    <Search className="w-6 h-6 text-slate-300" />
+          return (
+            <div key={groupName} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+              {/* Group Header */}
+              <div 
+                className="px-6 py-4 bg-slate-50/50 flex items-center justify-between cursor-pointer group"
+                onClick={() => toggleGroup(groupName)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
+                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   </div>
-                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
-                    No se encontraron pagos con estos filtros
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    className="text-[10px] font-black text-blue-600 uppercase"
-                  >
-                    Limpiar filtros
-                  </Button>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupName}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{items.length} movimientos</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-black text-indigo-600Leading-none mb-0.5">${groupTotal.toLocaleString()}</p>
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Total del grupo</p>
                 </div>
               </div>
+
+              {/* Group Table */}
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                  >
+                    <Table>
+                      <TableHeader className="bg-slate-50/30">
+                        <TableRow className="hover:bg-transparent border-slate-50">
+                          <TableHead className="w-[120px] text-[10px] font-black text-slate-400 uppercase tracking-widest pl-10">Fecha</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Servicio / Concepto</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Medio de Pago</TableHead>
+                          <TableHead className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto</TableHead>
+                          <TableHead className="w-[100px] text-right pr-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((pago) => {
+                          const expense = getExpenseForPayment(pago);
+                          return (
+                            <TableRow key={pago.id} className="group hover:bg-slate-50/50 border-slate-50 transition-colors">
+                              <TableCell className="pl-10">
+                                <div className="space-y-0.5">
+                                  <p className="text-[11px] font-black text-slate-900">{formatDate(pago.fecha_pago)}</p>
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                                    Periodo {pago.periodo_mes}/{pago.periodo_anio.toString().substring(2)}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-black text-slate-800">{pago.subcategoria_snapshot || pago.gasto_concepto_snapshot}</span>
+                                    {expense?.archived && (
+                                      <Badge variant="secondary" className="text-[8px] font-black bg-slate-100 text-slate-400 border-none px-1.5 py-0 rounded-md">ARCHIVADO</Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] font-bold border-slate-100 text-slate-400 py-0 px-1.5 rounded-lg">
+                                      {pago.categoria_snapshot}
+                                    </Badge>
+                                    {pago.observaciones && (
+                                      <span className="text-[10px] text-slate-300 italic truncate max-w-[150px]">• {pago.observaciones}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="p-1.5 bg-slate-50 rounded-lg group-hover:bg-white transition-colors">
+                                    <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    <p className="text-[10px] font-black text-slate-700 uppercase leading-none">{pago.forma_pago}</p>
+                                    {pago.entidad_pago && (
+                                      <p className="text-[9px] font-bold text-slate-400 leading-none">{pago.entidad_pago}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <p className="text-base font-black text-slate-900">${pago.monto_pagado.toLocaleString()}</p>
+                              </TableCell>
+                              <TableCell className="pr-6">
+                                <div className="flex justify-end gap-1">
+                                  {(pago.comprobante_cloudinary_url || pago.comprobante_cloudinary_secure_url) && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"
+                                      onClick={() => window.open(pago.comprobante_cloudinary_secure_url || pago.comprobante_cloudinary_url, '_blank')}
+                                    >
+                                      <ExternalLink className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  
+                                  <div className="flex items-center bg-slate-50 border border-slate-100 rounded-xl opacity-0 group-hover:opacity-100 transition-all p-0.5 ml-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-slate-400 hover:text-blue-600 rounded-lg"
+                                      onClick={() => expense && onEdit(expense)}
+                                      disabled={!expense}
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-slate-400 hover:text-rose-600 rounded-lg"
+                                      onClick={() => onDeletePayment(pago.id)}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          )}
-        </AnimatePresence>
+          );
+        })}
+
+        {filteredHistory.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center gap-6">
+            <div className="w-24 h-24 bg-slate-100 rounded-[2.5rem] flex items-center justify-center">
+              <Search className="w-10 h-10 text-slate-200" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900">No se encontraron registros</h3>
+              <p className="text-sm text-slate-400 max-w-xs mx-auto">Prueba ajustando los filtros o buscando un término diferente.</p>
+            </div>
+            <Button 
+              variant="outline" 
+              className="rounded-2xl font-black uppercase text-xs tracking-wider h-11 px-8 border-slate-200"
+              onClick={() => setSearchTerm('')}
+            >
+              LIMPIAR BÚSQUEDA
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
-}
+};
