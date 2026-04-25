@@ -674,6 +674,13 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                                       e.stopPropagation();
                                       setEditingPago(pago);
                                       setShowForm(true);
+
+                                      setTimeout(() => {
+                                        document.querySelector('.modal-scroll')?.scrollTo({
+                                          top: 0,
+                                          behavior: 'smooth'
+                                        });
+                                      }, 100);
                                     }}
                                     className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
                                     title="Editar pago"
