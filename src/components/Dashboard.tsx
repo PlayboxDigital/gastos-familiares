@@ -16,6 +16,10 @@ import {
   Coffee,
   Pizza,
   Calendar,
+  Phone,
+  ArrowRight,
+  MessageSquare,
+  X,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt, IngresoPago } from '../types';
@@ -24,6 +28,10 @@ import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { getEstadoVencimiento } from '../estadoVencimiento';
 import { generateExpenseOccurrences, isVariableExpense } from '../utils/expenseLogic';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -35,6 +43,7 @@ interface DashboardProps {
   onQuickPayExpense?: (expense: Expense) => void;
   onTabChange?: (tab: string) => void;
   onSelectIncome?: (clientName: string) => void;
+  onSelectDebtors?: () => void;
 }
 
 type ExpenseWithCredit = Expense & {
@@ -58,7 +67,6 @@ const getEstadoPagoReal = (
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth() + 1;
 
-  // Calculamos cuánto se ha pagado en este periodo específico
   const paidThisPeriod = history
     .filter(h => 
       h.gasto_id === expense.id && 
@@ -69,13 +77,10 @@ const getEstadoPagoReal = (
 
   const montoExigible = getMontoExigible(expense);
 
-  // Regla automática: Prioridad al monto pagado en el periodo
   if (montoExigible <= 0) return 'Pagado';
   if (paidThisPeriod >= montoExigible) return 'Pagado';
   if (paidThisPeriod > 0) return 'Parcial';
 
-  // Fallback para gastos que pudieran haber sido marcados como pagados manualmente 
-  // o que el total_abonado general ya cubra el monto exigible (aunque no haya historial de este mes)
   if (expense.estado_pago === 'Pagado') return 'Pagado';
   if (expense.estado_pago === 'Parcial') return 'Parcial';
   
@@ -96,9 +101,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onQuickPayExpense,
   onTabChange,
   onSelectIncome,
+  onSelectDebtors,
 }) => {
-  const currentMonth = new Date();
-  const currentPeriod = format(currentMonth, 'yyyy-MM');
+  const [isCobroModalOpen, setIsCobroModalOpen] = React.useState(false);
+  const [activeCobroTab, setActiveCobroTab] = React.useState<string>("debtors");
+
+  const { currentMonth, currentPeriod } = useMemo(() => {
+    const d = new Date();
+    return {
+      currentMonth: d,
+      currentPeriod: format(d, 'yyyy-MM')
+    };
+  }, []);
+
+  const clientesStatus = useMemo(() => {
+    const todayNum = new Date().getDate();
+
+    const stats = (incomes || [])
+      .filter((income) => (income.estado?.toLowerCase() || 'activo') === 'activo')
+      .map((income) => {
+        const payment = (incomePayments || []).find((p) =>
+          p.ingreso_id === income.id &&
+          p.periodo === currentPeriod
+        );
+
+        const montoMensual = income.monto_mensual || income.monto_mensual_ars || income.monto || income.monto_total || 0;
+        const cobrado = payment?.monto_pagado || 0;
+        const saldo = Math.max(0, montoMensual - cobrado);
+        
+        let estado: 'Pagado' | 'Parcial' | 'Vencido' | 'Pendiente' = 'Pendiente';
+        if (payment?.estado === 'Pagado') estado = 'Pagado';
+        else if (payment?.estado === 'Parcial') estado = 'Parcial';
+        else if (todayNum >= 15) estado = 'Vencido';
+        
+        return {
+          ...income,
+          montoMensual,
+          cobrado,
+          saldo,
+          estado,
+          isDeudor: estado !== 'Pagado'
+        };
+      });
+
+    const alDia = stats.filter(s => s.estado === 'Pagado');
+    const conDeuda = stats.filter(s => s.estado !== 'Pagado');
+
+    return {
+      all: stats,
+      alDia: {
+        list: alDia,
+        count: alDia.length,
+        total: alDia.reduce((sum, s) => sum + s.montoMensual, 0)
+      },
+      conDeuda: {
+        list: conDeuda,
+        count: conDeuda.length,
+        totalMensual: conDeuda.reduce((sum, s) => sum + s.montoMensual, 0),
+        totalAdeudado: conDeuda.reduce((sum, s) => sum + s.saldo, 0)
+      }
+    };
+  }, [incomes, incomePayments, currentPeriod]);
+
+  React.useEffect(() => {
+    if (isCobroModalOpen) {
+      setActiveCobroTab(clientesStatus.conDeuda.count > 0 ? "debtors" : "paid");
+    }
+  }, [isCobroModalOpen, clientesStatus.conDeuda.count]);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -413,8 +482,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           title="Cobro Mensual Clientes"
           value={`$${totalCobroMensualClientes.toLocaleString()}`}
           icon={<Users className="h-5 w-5 text-indigo-500" />}
-          description="Potencial bruto mensual"
+          description={`${clientesStatus.conDeuda.count} con deuda • $${clientesStatus.conDeuda.totalAdeudado.toLocaleString()} pendiente`}
           color="indigo"
+          onClick={() => setIsCobroModalOpen(true)}
         />
         <KPICard
           title="Gastos del Mes"
@@ -539,6 +609,170 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </motion.div>
       </div>
+
+      <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
+        <DialogContent showCloseButton={false} className="max-w-[calc(100vw-16px)] sm:max-w-xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl h-[82dvh] sm:h-auto flex flex-col">
+          <DialogHeader className="p-6 md:p-8 bg-indigo-600 text-white relative shrink-0">
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Users className="w-32 h-32" />
+            </div>
+            <DialogClose className="absolute right-4 top-4 rounded-full p-2.5 text-white/70 hover:text-white hover:bg-white/15 transition-all z-50">
+              <X className="w-5 h-5" />
+            </DialogClose>
+            <DialogTitle className="text-2xl md:text-3xl font-black tracking-tighter pr-8">Cobro Mensual Clientes</DialogTitle>
+            <p className="text-indigo-100 text-xs font-bold uppercase tracking-widest mt-1 opacity-80">
+              Resumen de cobranzas • {currentMonthName} {new Date().getFullYear()}
+            </p>
+          </DialogHeader>
+
+          <Tabs value={activeCobroTab} onValueChange={setActiveCobroTab} className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 md:px-8 mt-4 shrink-0">
+              <TabsList className="w-full h-12 p-1 bg-slate-100 rounded-2xl grid grid-cols-2">
+                <TabsTrigger 
+                  value="debtors" 
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest data-[state=active]:bg-white data-[state=active]:text-rose-600 data-[state=active]:shadow-sm"
+                >
+                  Con deuda ({clientesStatus.conDeuda.count})
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="paid" 
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-sm"
+                >
+                  Al día ({clientesStatus.alDia.count})
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <div className="flex-1 overflow-hidden p-6 md:p-8 pt-4 md:pt-4">
+              <TabsContent value="debtors" className="h-full m-0 focus-visible:outline-none flex flex-col">
+                <div className="flex items-center justify-between mb-4 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Pendiente de cobro</h4>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-black text-rose-600 tracking-tighter">${clientesStatus.conDeuda.totalAdeudado.toLocaleString()}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">Restante</p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar space-y-2">
+                  {clientesStatus.conDeuda.list.map(c => (
+                    <div 
+                      key={c.id} 
+                      className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-slate-50/50 transition-all text-left group"
+                    >
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                        onClick={() => {
+                          setIsCobroModalOpen(false);
+                          onSelectIncome?.(c.cliente);
+                        }}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-[10px] font-black text-rose-600">
+                          {c.cliente?.charAt(0)}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-slate-700 truncate">{c.cliente}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">{c.telefono_cliente || 'Sin WhatsApp'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <p className="text-xs font-black text-rose-600">${c.saldo.toLocaleString()}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Debe de ${c.montoMensual.toLocaleString()}</p>
+                        </div>
+                        
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          {c.telefono_cliente ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="w-8 h-8 rounded-lg text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cleanedPhone = c.telefono_cliente?.replace(/\D/g, '');
+                                const monthName = format(new Date(), 'MMMM', { locale: es });
+                                const day = new Date().getDate();
+                                const msg = `Hola, estamos a ${day} de ${monthName} y todavía no me llegó el pago. ¿Podés confirmarme si ya lo realizaste? Gracias.`;
+                                window.open(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                              }}
+                            >
+                              <Phone className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed" title="Sin WhatsApp">
+                              <Phone className="w-4 h-4 opacity-50" />
+                            </div>
+                          )}
+                        </div>
+
+                        <Badge className={`border-none text-[8px] font-black uppercase ${c.estado === 'Vencido' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {c.estado}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                  {clientesStatus.conDeuda.list.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 mb-4">
+                        <CheckCircle2 className="w-8 h-8" />
+                      </div>
+                      <p className="text-sm font-black text-slate-900 uppercase">¡Al día!</p>
+                      <p className="text-xs text-slate-400 font-medium italic">No hay clientes con deuda este mes.</p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="paid" className="h-full m-0 focus-visible:outline-none flex flex-col justify-center items-center text-center">
+                <div className="w-24 h-24 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-6">
+                  <CheckCircle2 className="w-12 h-12" />
+                </div>
+                
+                <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Cobranzas realizadas</h4>
+                
+                <div className="space-y-1 mb-8">
+                  <p className="text-4xl font-black text-emerald-600 tracking-tighter">${clientesStatus.alDia.total.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Cobrado en {currentMonthName}</p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-emerald-600 font-black">
+                    {clientesStatus.alDia.count}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black text-slate-900 uppercase">Clientes al día</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Sin deudas pendientes</p>
+                  </div>
+                </div>
+              </TabsContent>
+            </div>
+          </Tabs>
+
+          <DialogFooter className="p-6 bg-slate-50 flex-col sm:flex-row gap-3 shrink-0">
+            <Button 
+              variant="outline" 
+              className="rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest border-slate-200 text-slate-500 active:scale-95 transition-transform"
+              onClick={() => setIsCobroModalOpen(false)}
+            >
+              Cerrar resumen
+            </Button>
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-100 gap-2 active:scale-95 transition-transform"
+              onClick={() => {
+                setIsCobroModalOpen(false);
+                onSelectDebtors?.();
+              }}
+            >
+              Ver todos los clientes
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">

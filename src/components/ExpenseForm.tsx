@@ -70,17 +70,18 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     }
   }, [expenseToEdit, isOpen]);
 
+  const handleChange = React.useCallback((field: keyof Omit<Expense, 'id'>, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Normalizar datos antes de enviar: fecha_pago nunca debe ser ""
+    // Prevenir doble envío si fuera necesario (aunque aquí es síncrono para el padre)
     const normalizedData = {
       ...formData,
       fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null),
-      // Si es variable, el día de vencimiento no es relevante/obligatorio
       dia_vencimiento: formData.tipo_gasto === 'variable' ? undefined : formData.dia_vencimiento
     };
-    
-    console.log("ITEM_ENVIADO_DIA_VENCIMIENTO:", normalizedData.dia_vencimiento);
     
     onSubmit({ ...normalizedData, id: expenseToEdit?.id });
     onClose();
@@ -88,18 +89,18 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full h-full max-w-none sm:max-w-[425px] sm:h-auto sm:rounded-2xl p-0 gap-0 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto modal-scroll px-4 md:px-6 py-6 pb-24 sm:pb-6">
-          <DialogHeader className="mb-6 pt-[env(safe-area-inset-top)]">
-            <DialogTitle className="text-xl font-bold text-slate-900">
+      <DialogContent className="max-md:p-0 max-md:gap-0 sm:max-w-[500px] overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto modal-scroll px-6 md:px-8 py-6">
+          <DialogHeader className="mb-6 pt-4 md:pt-0">
+            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">
               {expenseToEdit ? 'Editar Gasto' : 'Nuevo Gasto'}
             </DialogTitle>
-            <DialogDescription>
-              Completa los detalles del gasto para mantener tus finanzas al día.
+            <DialogDescription className="text-slate-500 font-medium">
+              Completa los detalles para mantener el control.
             </DialogDescription>
           </DialogHeader>
 
-          <form id="expense-form" onSubmit={handleSubmit} className="space-y-6">
+          <form id="expense-form" onSubmit={handleSubmit} className="space-y-6 pb-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="fecha" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Fecha de inicio</Label>
@@ -107,7 +108,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                   id="fecha" 
                   type="date" 
                   value={formData.fecha}
-                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  onChange={(e) => handleChange('fecha', e.target.value)}
                   required
                   className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
                 />
@@ -120,7 +121,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                   inputMode="decimal"
                   step="0.01"
                   value={formData.monto || ''}
-                  onChange={(e) => setFormData({ ...formData, monto: parseFloat(e.target.value) })}
+                  onChange={(e) => handleChange('monto', parseFloat(e.target.value))}
                   required
                   placeholder="0.00"
                   className="h-12 sm:h-10 bg-slate-50 border-none font-black text-lg sm:text-base rounded-xl"
@@ -133,7 +134,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
               <Input 
                 id="subcategoria" 
                 value={formData.subcategoria}
-                onChange={(e) => setFormData({ ...formData, subcategoria: e.target.value })}
+                onChange={(e) => handleChange('subcategoria', e.target.value)}
                 required
                 placeholder="Ej: Supermercado, Alquiler..."
                 className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
@@ -145,7 +146,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                 <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Categoría</Label>
                 <Select 
                   value={formData.categoria} 
-                  onValueChange={(v) => setFormData({ ...formData, categoria: v })}
+                  onValueChange={(v) => handleChange('categoria', v)}
                 >
                   <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
                     <SelectValue />
@@ -161,7 +162,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                 <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Responsable</Label>
                 <Select 
                   value={formData.responsable} 
-                  onValueChange={(v) => setFormData({ ...formData, responsable: v })}
+                  onValueChange={(v) => handleChange('responsable', v)}
                 >
                   <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
                     <SelectValue />
@@ -180,7 +181,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                 <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Prioridad</Label>
                 <Select 
                   value={formData.prioridad} 
-                  onValueChange={(v) => setFormData({ ...formData, prioridad: v as Priority })}
+                  onValueChange={(v) => handleChange('prioridad', v as Priority)}
                 >
                   <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
                     <SelectValue />
@@ -201,7 +202,10 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                 <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Gasto</Label>
                 <Select 
                   value={formData.tipo_gasto || 'fijo'} 
-                  onValueChange={(v: 'fijo' | 'variable') => setFormData({ ...formData, tipo_gasto: v, tipo: v === 'variable' ? 'Variable' : 'Fijo' })}
+                  onValueChange={(v: 'fijo' | 'variable') => {
+                    handleChange('tipo_gasto', v);
+                    handleChange('tipo', v === 'variable' ? 'Variable' : 'Fijo');
+                  }}
                 >
                   <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
                     <SelectValue />
@@ -227,7 +231,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                     value={formData.dia_vencimiento || ''}
                     onChange={(e) => {
                       const val = parseInt(e.target.value);
-                      setFormData({ ...formData, dia_vencimiento: isNaN(val) ? 0 : val });
+                      handleChange('dia_vencimiento', isNaN(val) ? 0 : val);
                     }}
                     className="h-12 sm:h-10 bg-slate-50 border-none font-bold rounded-xl"
                     placeholder={new Date().getDate().toString()}
@@ -257,11 +261,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                   value={formData.estado_pago} 
                   onValueChange={(v) => {
                     const newStatus = v as PaymentStatus;
-                    setFormData({ 
-                      ...formData, 
-                      estado_pago: newStatus,
-                      fecha_pago: newStatus === 'Pagado' ? format(new Date(), 'yyyy-MM-dd') : null
-                    });
+                    handleChange('estado_pago', newStatus);
+                    handleChange('fecha_pago', newStatus === 'Pagado' ? format(new Date(), 'yyyy-MM-dd') : null);
                   }}
                 >
                   <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
@@ -280,7 +281,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                     id="fecha_pago" 
                     type="date" 
                     value={formData.fecha_pago || ''}
-                    onChange={(e) => setFormData({ ...formData, fecha_pago: e.target.value })}
+                    onChange={(e) => handleChange('fecha_pago', e.target.value)}
                     className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
                   />
                 </div>
@@ -292,7 +293,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
               <Input 
                 id="concepto" 
                 value={formData.concepto}
-                onChange={(e) => setFormData({ ...formData, concepto: e.target.value })}
+                onChange={(e) => handleChange('concepto', e.target.value)}
                 placeholder="Nota adicional..."
                 className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
               />
@@ -300,14 +301,14 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
           </form>
         </div>
 
-        <DialogFooter className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 flex flex-row gap-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <Button type="button" variant="ghost" onClick={onClose} className="flex-1 rounded-xl h-12">
+        <DialogFooter className="bg-white px-6 py-4 flex flex-row gap-3">
+          <Button type="button" variant="ghost" onClick={onClose} className="flex-1 rounded-2xl h-12 font-bold text-slate-400 active:scale-95 transition-transform">
             Cancelar
           </Button>
           <Button 
             form="expense-form"
             type="submit" 
-            className="flex-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-12 font-black uppercase tracking-widest text-[11px]"
+            className="flex-2 bg-slate-900 hover:bg-black text-white rounded-2xl h-12 font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
           >
             {expenseToEdit ? 'Guardar' : 'Registrar'}
           </Button>

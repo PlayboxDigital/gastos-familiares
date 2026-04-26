@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Income, PaymentStatus, IngresoPago, IngresoPagoInput } from '../types';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { 
   X, Phone, Globe, Database, Github, Code, TrendingUp, Mail, 
   ExternalLink, Edit2, Calendar, DollarSign, Info, Shield, Server, Users,
@@ -26,6 +28,84 @@ interface ClientDetailProps {
   onEdit: (income: Income) => void;
   onRefresh?: () => void;
 }
+
+// Componente de ítem de pago memoizado para evitar re-renders masivos en la lista
+const PaymentItem = React.memo(({ 
+  pago, 
+  onEdit, 
+  onDelete, 
+  getPaymentStatusBadge 
+}: { 
+  pago: IngresoPago, 
+  onEdit: (pago: IngresoPago) => void, 
+  onDelete: (id: string) => void, 
+  getPaymentStatusBadge: (status: string) => string 
+}) => {
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-100 transition-all">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 font-black text-xs uppercase">
+          {pago.periodo.split('-')[1]}/{pago.periodo.split('-')[0].substring(2)}
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-black text-slate-700">Periodo {pago.periodo}</p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(pago);
+                }}
+                className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors active:scale-90"
+                title="Editar pago"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(pago.id);
+                }}
+                className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors active:scale-90"
+                title="Eliminar pago"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+              <Calendar className="w-2.5 h-2.5" /> {pago.fecha_pago}
+            </p>
+            {pago.observacion && (
+              pago.observacion.includes('Comp: http') ? (
+                <a
+                  href={pago.observacion.split('Comp: ')[1]?.split(' ')[0]}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-blue-500 font-bold underline truncate max-w-[150px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Ver comprobante
+                </a>
+              ) : (
+                <p className="text-[10px] text-slate-300 italic truncate max-w-[150px]">• {pago.observacion}</p>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="text-right space-y-1">
+        <p className="text-sm font-black text-slate-900">${pago.monto_pagado.toLocaleString()}</p>
+        <Badge className={`text-[8px] font-black uppercase px-2 py-0 border-none rounded-lg ${getPaymentStatusBadge(pago.estado)}`}>
+          {pago.estado}
+        </Badge>
+      </div>
+    </div>
+  );
+});
 
 export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onClose, onEdit, onRefresh }) => {
   const [pagos, setPagos] = useState<IngresoPago[]>([]);
@@ -94,6 +174,23 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
       setIsLoadingPagos(false);
     }
   };
+
+  const handleEditPago = React.useCallback((pago: IngresoPago) => {
+    setEditingPago(pago);
+    setShowForm(true);
+
+    setTimeout(() => {
+      document.querySelector('.modal-scroll')?.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }, 100);
+  }, []);
+
+  const handleDeletePagoPrompt = React.useCallback((id: string) => {
+    setPagoAEliminar(id);
+    setShowDeleteConfirm(true);
+  }, []);
 
   const uploadComprobanteToCloudinary = async (): Promise<string> => {
     if (!comprobanteFile) return comprobanteUrl.trim();
@@ -250,25 +347,32 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
     }
   };
 
-  const handleWhatsApp = () => {
+  const handleWhatsApp = (isReminder = false) => {
     if (!income.telefono_cliente) {
       alert("Este cliente no tiene un teléfono registrado.");
       return;
     }
 
-    const monto = income.moneda === 'USD'
-      ? `U$D ${income.monto_mensual || 0}`
-      : `$${(income.monto_mensual || income.monto_mensual_ars || income.monto_total || 0).toLocaleString()}`;
-
-    const mensaje = `Hola ${income.cliente}, ¿cómo estás? Te recuerdo que el pago mensual del servicio está próximo a vencer. El importe es de ${monto}.`;
-    const encoded = encodeURIComponent(mensaje);
     const phone = income.telefono_cliente.replace(/\D/g, '');
-
     if (!phone) {
       alert("El teléfono del cliente no es válido.");
       return;
     }
 
+    let mensaje = '';
+    
+    if (isReminder) {
+      const monthName = format(new Date(), 'MMMM', { locale: es });
+      const day = new Date().getDate();
+      mensaje = `Hola, estamos a ${day} de ${monthName} y todavía no me llegó el pago. ¿Podés confirmarme si ya lo realizaste? Gracias.`;
+    } else {
+      const monto = income.moneda === 'USD'
+        ? `U$D ${income.monto_mensual || 0}`
+        : `$${(income.monto_mensual || income.monto_mensual_ars || income.monto_total || 0).toLocaleString()}`;
+      mensaje = `Hola ${income.cliente}, ¿cómo estás? Te recuerdo que el pago mensual del servicio está próximo a vencer. El importe es de ${monto}.`;
+    }
+
+    const encoded = encodeURIComponent(mensaje);
     window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
   };
 
@@ -344,7 +448,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
+    <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -354,15 +458,17 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
       />
       
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative bg-white w-full h-full sm:h-auto sm:max-w-5xl sm:rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden flex flex-col sm:max-h-[95vh]"
+        initial={{ opacity: 0, y: '100%' }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className="relative bg-white w-full h-[95dvh] sm:h-auto sm:max-w-5xl sm:rounded-[2.5rem] rounded-t-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden flex flex-col sm:max-h-[92vh] z-[111]"
       >
         {/* Header Section */}
-        <div className="p-4 md:p-8 bg-slate-50/50 border-b border-slate-100 shrink-0 mt-[env(safe-area-inset-top)] sm:mt-0">
+        <div className="p-4 md:p-8 bg-slate-50/50 border-b border-slate-100 shrink-0 pt-10 sm:pt-8 relative">
           <div className="flex justify-between items-start">
             <div className="flex gap-4 md:gap-6 items-center flex-1 min-w-0">
+               {/* Close button for mobile inside the header if needed, but we have the X on the right */}
               <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-3xl bg-white shadow-xl shadow-slate-100 flex items-center justify-center p-2 md:p-3 relative group shrink-0">
                 {income.logo_url ? (
                   <img src={income.logo_url} alt={income.cliente} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
@@ -438,7 +544,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
         </div>
 
         {/* Content Section */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scrollbar-thin scrollbar-thumb-slate-200 modal-scroll mb-[env(safe-area-inset-bottom)] sm:mb-0">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scrollbar-thin scrollbar-thumb-slate-200 modal-scroll pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
             {/* Column 1: Core Financials & Contact */}
@@ -659,77 +765,13 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                   ) : pagos.length > 0 ? (
                     <div className="space-y-2 max-h-[300px] overflow-y-auto px-1 py-1 scrollbar-thin scrollbar-thumb-slate-200">
                       {pagos.map((pago) => (
-                        <div key={pago.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-100 transition-all">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 font-black text-xs uppercase">
-                              {pago.periodo.split('-')[1]}/{pago.periodo.split('-')[0].substring(2)}
-                            </div>
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <p className="text-xs font-black text-slate-700">Periodo {pago.periodo}</p>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingPago(pago);
-                                      setShowForm(true);
-
-                                      setTimeout(() => {
-                                        document.querySelector('.modal-scroll')?.scrollTo({
-                                          top: 0,
-                                          behavior: 'smooth'
-                                        });
-                                      }, 100);
-                                    }}
-                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
-                                    title="Editar pago"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setPagoAEliminar(pago.id);
-                                      setShowDeleteConfirm(true);
-                                    }}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                                    title="Eliminar pago"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                  <Calendar className="w-2.5 h-2.5" /> {pago.fecha_pago}
-                                </p>
-                                {pago.observacion && (
-                                  pago.observacion.includes('Comp: http') ? (
-                                    <a
-                                      href={pago.observacion.split('Comp: ')[1]?.split(' ')[0]}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-[10px] text-blue-500 font-bold underline truncate max-w-[150px]"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      Ver comprobante
-                                    </a>
-                                  ) : (
-                                    <p className="text-[10px] text-slate-300 italic truncate max-w-[150px]">• {pago.observacion}</p>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right space-y-1">
-                            <p className="text-sm font-black text-slate-900">${pago.monto_pagado.toLocaleString()}</p>
-                            <Badge className={`text-[8px] font-black uppercase px-2 py-0 border-none rounded-lg ${getPaymentStatusBadge(pago.estado)}`}>
-                              {pago.estado}
-                            </Badge>
-                          </div>
-                        </div>
+                        <PaymentItem 
+                          key={pago.id}
+                          pago={pago}
+                          onEdit={handleEditPago}
+                          onDelete={handleDeletePagoPrompt}
+                          getPaymentStatusBadge={getPaymentStatusBadge}
+                        />
                       ))}
                     </div>
                   ) : (
@@ -766,14 +808,38 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Contacto Primario</h3>
                   </div>
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-                        <Phone className="w-4 h-4" />
+                    <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-100 shadow-sm group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teléfono</span>
+                          <span className="text-xs font-bold text-slate-700">{income.telefono_cliente || income.cliente_contacto || 'No registrado'}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teléfono</span>
-                        <span className="text-xs font-bold text-slate-700">{income.telefono_cliente || income.cliente_contacto || 'No registrado'}</span>
-                      </div>
+                      {income.telefono_cliente && (
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-xl text-emerald-500 hover:bg-emerald-50"
+                            onClick={() => handleWhatsApp(true)}
+                            title="Reclamar deuda"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-xl text-blue-500 hover:bg-blue-50"
+                            onClick={() => handleWhatsApp(false)}
+                            title="Recordatorio estándar"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                       <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
@@ -835,7 +901,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
         <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Gastos Familiares © 2024</p>
           <Button 
-            className="bg-slate-900 hover:bg-black text-white rounded-2xl px-8 font-black uppercase tracking-tight shadow-xl shadow-slate-200"
+            className="bg-slate-900 hover:bg-black text-white rounded-2xl px-8 font-black uppercase tracking-tight shadow-xl shadow-slate-200 active:scale-95 transition-transform"
             onClick={onClose}
           >
             Cerrar Ficha

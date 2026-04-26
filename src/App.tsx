@@ -111,11 +111,13 @@ export default function App() {
   const [selectedIncomeForDetail, setSelectedIncomeForDetail] = useState<Income | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
+  const [incomePaymentFilter, setIncomePaymentFilter] = useState<'all' | 'debtors' | 'paid'>('all');
 
   // Sincronizar búsqueda cuando se cambia de pestaña manual
   useEffect(() => {
     if (activeTab !== 'incomes') {
       setIncomeSearchTerm('');
+      setIncomePaymentFilter('all');
     }
   }, [activeTab]);
   const [isLoading, setIsLoading] = useState(true);
@@ -705,7 +707,7 @@ export default function App() {
     console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
     
     switch (activeTab) {
-      case 'dashboard':
+        case 'dashboard':
         return (
           <Dashboard
             expenses={expenses}
@@ -718,6 +720,12 @@ export default function App() {
             onTabChange={setActiveTab}
             onSelectIncome={(name) => {
               setIncomeSearchTerm(name);
+              setIncomePaymentFilter('all');
+              setActiveTab('incomes');
+            }}
+            onSelectDebtors={() => {
+              setIncomeSearchTerm('');
+              setIncomePaymentFilter('debtors');
               setActiveTab('incomes');
             }}
           />
@@ -766,6 +774,8 @@ export default function App() {
             onDelete={handleDeleteIncome}
             searchTerm={incomeSearchTerm}
             onSearchChange={setIncomeSearchTerm}
+            paymentStatusFilter={incomePaymentFilter}
+            onPaymentStatusFilterChange={setIncomePaymentFilter}
           />
         );
       case 'settings':
@@ -785,6 +795,12 @@ export default function App() {
             onTabChange={setActiveTab}
             onSelectIncome={(name) => {
               setIncomeSearchTerm(name);
+              setIncomePaymentFilter('all');
+              setActiveTab('incomes');
+            }}
+            onSelectDebtors={() => {
+              setIncomeSearchTerm('');
+              setIncomePaymentFilter('debtors');
               setActiveTab('incomes');
             }}
           />
@@ -935,7 +951,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
           <div className="max-w-7xl mx-auto">
             {hasLegacyData && (
               <motion.div
@@ -1053,7 +1069,7 @@ export default function App() {
         </div>
       </main>
 
-      <nav className="md:hidden bg-white border-t border-slate-200 px-2 py-2 flex justify-between items-center sticky bottom-0 z-30">
+      <nav className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1 flex justify-between items-center fixed bottom-0 left-0 right-0 z-40 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <MobileNavLink
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}

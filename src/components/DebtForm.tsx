@@ -53,6 +53,10 @@ export const DebtForm: React.FC<DebtFormProps> = ({ isOpen, onClose, onSubmit, d
     }
   }, [debtToEdit, isOpen]);
 
+  const handleChange = React.useCallback((field: keyof DebtInput, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -74,118 +78,123 @@ export const DebtForm: React.FC<DebtFormProps> = ({ isOpen, onClose, onSubmit, d
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] rounded-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-slate-900">
-            {debtToEdit ? 'Editar Deuda' : 'Nueva Deuda'}
-          </DialogTitle>
-          <DialogDescription>
-            Registra deudas con personas o entidades externas.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="acreedor" className="text-xs font-bold text-slate-500 uppercase">Acreedor (¿A quién se le debe?)</Label>
-            <Input 
-              id="acreedor" 
-              value={formData.acreedor}
-              onChange={(e) => setFormData({ ...formData, acreedor: e.target.value })}
-              required
-              placeholder="Ej: Banco, Amigo, Préstamo..."
-              className="bg-slate-50 border-none"
-            />
-          </div>
+      <DialogContent className="max-md:p-0 max-md:gap-0 sm:max-w-[425px] overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto modal-scroll px-6 py-6 pt-10 md:pt-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">
+              {debtToEdit ? 'Editar Deuda' : 'Nueva Deuda'}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 font-medium">
+              Registra deudas con personas o entidades externas.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="space-y-2">
-            <Label htmlFor="concepto_deuda" className="text-xs font-bold text-slate-500 uppercase">Concepto</Label>
-            <Input 
-              id="concepto_deuda" 
-              value={formData.concepto}
-              onChange={(e) => setFormData({ ...formData, concepto: e.target.value })}
-              required
-              placeholder="Ej: Préstamo personal, Tarjeta de crédito..."
-              className="bg-slate-50 border-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <form id="debt-form" onSubmit={handleSubmit} className="space-y-6 pb-4">
             <div className="space-y-2">
-              <Label htmlFor="monto_total" className="text-xs font-bold text-slate-500 uppercase">Monto Total ($)</Label>
+              <Label htmlFor="acreedor" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Acreedor (¿A quién se le debe?)</Label>
               <Input 
-                id="monto_total" 
-                type="number" 
-                step="0.01"
-                value={formData.monto_total}
-                onChange={(e) => setFormData({ ...formData, monto_total: parseFloat(e.target.value) || 0 })}
+                id="acreedor" 
+                value={formData.acreedor}
+                onChange={(e) => handleChange('acreedor', e.target.value)}
                 required
-                placeholder="0.00"
-                className="bg-slate-50 border-none font-bold text-blue-600"
+                placeholder="Ej: Banco, Amigo, Préstamo..."
+                className="h-12 bg-slate-50 border-none rounded-xl focus:ring-blue-500"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="monto_pagado" className="text-xs font-bold text-slate-500 uppercase">Monto Pagado ($)</Label>
-              <Input 
-                id="monto_pagado" 
-                type="number" 
-                step="0.01"
-                value={formData.monto_pagado}
-                onChange={(e) => setFormData({ ...formData, monto_pagado: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00"
-                className="bg-slate-50 border-none font-bold text-emerald-600"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="fecha_deuda" className="text-xs font-bold text-slate-500 uppercase">Fecha Inicial</Label>
+              <Label htmlFor="concepto_deuda" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Concepto</Label>
               <Input 
-                id="fecha_deuda" 
-                type="date" 
-                value={formData.fecha}
-                onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                id="concepto_deuda" 
+                value={formData.concepto}
+                onChange={(e) => handleChange('concepto', e.target.value)}
                 required
-                className="bg-slate-50 border-none"
+                placeholder="Ej: Préstamo personal, Tarjeta de crédito..."
+                className="h-12 bg-slate-50 border-none rounded-xl focus:ring-blue-500"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-slate-500 uppercase">Estado</Label>
-              <Select 
-                value={formData.estado} 
-                onValueChange={(v) => setFormData({ ...formData, estado: v as DebtStatus })}
-              >
-                <SelectTrigger className="bg-slate-50 border-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pendiente">Pendiente</SelectItem>
-                  <SelectItem value="parcial">Parcial</SelectItem>
-                  <SelectItem value="pagada">Pagada</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="monto_total" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Monto Total</Label>
+                <Input 
+                  id="monto_total" 
+                  type="number" 
+                  step="0.01"
+                  inputMode="decimal"
+                  value={formData.monto_total}
+                  onChange={(e) => handleChange('monto_total', parseFloat(e.target.value) || 0)}
+                  required
+                  placeholder="0.00"
+                  className="h-12 bg-slate-50 border-none font-bold text-blue-600 rounded-xl focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="monto_pagado" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Monto Pagado</Label>
+                <Input 
+                  id="monto_pagado" 
+                  type="number" 
+                  step="0.01"
+                  inputMode="decimal"
+                  value={formData.monto_pagado}
+                  onChange={(e) => handleChange('monto_pagado', parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                  className="h-12 bg-slate-50 border-none font-bold text-emerald-600 rounded-xl focus:ring-emerald-500"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="observaciones" className="text-xs font-bold text-slate-500 uppercase">Observaciones (Opcional)</Label>
-            <Input 
-              id="observaciones" 
-              value={formData.observaciones}
-              onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-              placeholder="Nota adicional..."
-              className="bg-slate-50 border-none"
-            />
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="fecha_deuda" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Fecha Inicial</Label>
+                <Input 
+                  id="fecha_deuda" 
+                  type="date" 
+                  value={formData.fecha}
+                  onChange={(e) => handleChange('fecha', e.target.value)}
+                  required
+                  className="h-12 bg-slate-50 border-none rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Estado</Label>
+                <Select 
+                  value={formData.estado} 
+                  onValueChange={(v) => handleChange('estado', v as DebtStatus)}
+                >
+                  <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="pendiente" className="rounded-lg">Pendiente</SelectItem>
+                    <SelectItem value="parcial" className="rounded-lg">Parcial</SelectItem>
+                    <SelectItem value="pagada" className="rounded-lg">Pagada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl">
-              Cancelar
-            </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8">
-              {debtToEdit ? 'Guardar Cambios' : 'Registrar Deuda'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="observaciones" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Observaciones</Label>
+              <Input 
+                id="observaciones" 
+                value={formData.observaciones}
+                onChange={(e) => handleChange('observaciones', e.target.value)}
+                placeholder="Nota adicional..."
+                className="h-12 bg-slate-50 border-none rounded-xl"
+              />
+            </div>
+          </form>
+        </div>
+
+        <DialogFooter className="bg-white px-6 py-4 flex flex-row gap-3">
+          <Button type="button" variant="ghost" onClick={onClose} className="flex-1 rounded-2xl h-12 font-bold text-slate-400 active:scale-95 transition-transform">
+            CANCELAR
+          </Button>
+          <Button form="debt-form" type="submit" className="flex-2 bg-slate-900 hover:bg-black text-white rounded-2xl h-12 font-black uppercase tracking-widest text-xs active:scale-95 transition-transform">
+            {debtToEdit ? 'GUARDAR' : 'REGISTRAR'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

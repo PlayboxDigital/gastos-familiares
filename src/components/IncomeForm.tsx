@@ -186,10 +186,10 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full h-full sm:h-auto sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden p-0 flex flex-col gap-0 border-none sm:border shadow-2xl">
-        <div className="p-6 md:p-8 border-b bg-slate-50/50 shrink-0">
+      <DialogContent className="max-md:h-auto max-md:max-h-[95dvh] max-md:p-0 max-md:gap-0 sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden p-0 flex flex-col gap-0 border-none sm:border shadow-2xl">
+        <div className="p-6 md:p-8 border-b bg-slate-50/50 shrink-0 pt-10 md:pt-8">
           <DialogHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <DialogTitle className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                   {incomeToEdit ? 'Editar Cliente' : 'Nuevo Cliente'}
@@ -198,7 +198,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                   Gestiona la información comercial y técnica del servicio.
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
+              <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 self-start md:self-center">
                 <button
                   type="button"
                   onClick={() => handleInputChange('estado', 'activo')}
@@ -217,7 +217,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
             </div>
           </DialogHeader>
         </div>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+        <form id="income-form" onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 modal-scroll">
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -494,14 +494,14 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
             </div>
           </div>
 
-          <div className="p-6 md:p-8 border-t shrink-0 flex items-center justify-between bg-white">
-            <Button type="button" variant="ghost" onClick={onClose} className="rounded-2xl font-bold text-slate-400 h-10 px-6">
+          <DialogFooter className="p-4 md:p-8 border-t shrink-0 flex items-center justify-between bg-white gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} className="flex-1 rounded-2xl font-bold text-slate-400 h-12 px-6 border-none">
               Cancelar
             </Button>
-            <Button type="submit" className="bg-slate-900 hover:bg-black text-white rounded-2xl h-12 px-12 font-black uppercase tracking-tight shadow-xl shadow-slate-200 transition-all active:scale-95">
-              {incomeToEdit ? 'Guardar Cambios' : 'Registrar Cliente'}
+            <Button form="income-form" type="submit" className="flex-2 bg-slate-900 hover:bg-black text-white rounded-2xl h-12 px-12 font-black uppercase tracking-tight shadow-xl shadow-slate-200 transition-all active:scale-95">
+              {incomeToEdit ? 'GUARDAR' : 'REGISTRAR'}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
         <datalist id="existing-emails">
           {existingEmails.map(email => <option key={email} value={email} />)}

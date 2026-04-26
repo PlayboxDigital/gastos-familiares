@@ -30,7 +30,7 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
     observaciones: '',
   });
 
-  const fetchMovimientos = async () => {
+  const fetchMovimientos = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await autosService.obtenerMovimientos(auto.id);
@@ -40,11 +40,11 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [auto.id]);
 
   useEffect(() => {
     fetchMovimientos();
-  }, [auto.id]);
+  }, [fetchMovimientos]);
 
   const handleCreateMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +66,10 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
     }
   };
 
+  const handleInputChange = React.useCallback((field: keyof AutoMovimientoInput, value: any) => {
+    setNewMov(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   const total = movimientos.reduce((sum, m) => sum + m.monto, 0);
   const ultimoGasto = movimientos.length > 0 ? movimientos[0].monto : 0;
   const cantidadMovimientos = movimientos.length;
@@ -86,7 +90,7 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Gasto Histórico</p>
             <p className="text-2xl font-black text-blue-600 leading-tight">${total.toLocaleString()}</p>
           </div>
-          <Button onClick={() => setIsFormOpen(true)} className="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl px-6 h-12">
+          <Button onClick={() => setIsFormOpen(true)} className="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl px-6 h-12 active:scale-95 transition-transform">
             <Plus className="w-5 h-5 mr-2" />
             Agregar gasto
           </Button>
@@ -189,13 +193,15 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
 
       {/* Modal Nuevo Movimiento */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl p-8">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">Agregar Gasto</DialogTitle>
-            <DialogDescription className="font-medium text-slate-500">Registra un nuevo gasto o mantenimiento para tu vehículo.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateMovimiento} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+        <DialogContent className="max-md:h-auto max-md:max-h-[85dvh] max-md:p-0 max-md:gap-0 sm:max-w-[425px] overflow-hidden flex flex-col">
+          <div className="p-6 border-b shrink-0 pt-10 md:pt-6 bg-slate-50/50">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">Agregar Gasto</DialogTitle>
+              <DialogDescription className="font-medium text-slate-500">Registra un nuevo gasto o mantenimiento para tu vehículo.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form id="auto-mov-form" onSubmit={handleCreateMovimiento} className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="fecha" className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
                   <Calendar className="w-3 h-3" /> Fecha
@@ -204,9 +210,9 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
                   id="fecha" 
                   type="date"
                   value={newMov.fecha} 
-                  onChange={e => setNewMov({...newMov, fecha: e.target.value})}
+                  onChange={e => handleInputChange('fecha', e.target.value)}
                   required
-                  className="bg-slate-50 border-none rounded-xl h-12"
+                  className="bg-slate-50 border-none rounded-xl h-12 font-bold"
                 />
               </div>
               <div className="space-y-2">
@@ -217,20 +223,21 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
                   id="monto" 
                   type="number"
                   value={newMov.monto} 
-                  onChange={e => setNewMov({...newMov, monto: Number(e.target.value)})}
+                  onChange={e => handleInputChange('monto', Number(e.target.value))}
                   required
-                  className="bg-slate-50 border-none rounded-xl h-12"
+                  className="bg-slate-50 border-none rounded-xl h-12 font-bold text-lg"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="concepto" className="text-xs font-black uppercase text-slate-500 tracking-widest">Concepto (ej: Service 50k, Seguro, Cubiertas)</Label>
+              <Label htmlFor="concepto" className="text-xs font-black uppercase text-slate-500 tracking-widest">Concepto</Label>
               <Input 
                 id="concepto" 
                 value={newMov.concepto} 
-                onChange={e => setNewMov({...newMov, concepto: e.target.value})}
+                onChange={e => handleInputChange('concepto', e.target.value)}
                 required
-                className="bg-slate-50 border-none rounded-xl h-12"
+                placeholder="Ej: Service 50k, Seguro, Cubiertas"
+                className="bg-slate-50 border-none rounded-xl h-12 font-bold"
               />
             </div>
             <div className="space-y-2">
@@ -239,14 +246,14 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
               </Label>
               <Select 
                 value={newMov.categoria} 
-                onValueChange={(val) => setNewMov({...newMov, categoria: val})}
+                onValueChange={(val) => handleInputChange('categoria', val)}
               >
-                <SelectTrigger className="bg-slate-50 border-none rounded-xl h-12">
+                <SelectTrigger className="bg-slate-50 border-none rounded-xl h-12 font-bold">
                   <SelectValue placeholder="Seleccionar categoría" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border-slate-100">
                   {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="font-medium">
+                    <SelectItem key={cat} value={cat} className="font-bold">
                       {cat}
                     </SelectItem>
                   ))}
@@ -258,16 +265,17 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
               <Input 
                 id="obs" 
                 value={newMov.observaciones || ''} 
-                onChange={e => setNewMov({...newMov, observaciones: e.target.value})}
-                className="bg-slate-50 border-none rounded-xl h-12"
+                onChange={e => handleInputChange('observaciones', e.target.value)}
+                placeholder="Detalle adicional..."
+                className="bg-slate-50 border-none rounded-xl h-12 font-medium"
               />
             </div>
-            <DialogFooter className="pt-6">
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-8 rounded-2xl font-bold transition-all shadow-lg hover:shadow-blue-100 uppercase tracking-widest text-xs">
-                Registrar Gasto
-              </Button>
-            </DialogFooter>
           </form>
+          <div className="p-4 md:p-6 border-t shrink-0 bg-white">
+            <Button form="auto-mov-form" type="submit" className="w-full bg-slate-900 hover:bg-black text-white h-14 rounded-2xl font-black transition-all shadow-lg uppercase tracking-widest text-xs active:scale-95">
+              Registrar Gasto
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

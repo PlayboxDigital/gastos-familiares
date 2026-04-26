@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
+  DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -181,18 +182,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  const handleMontoChange = (value: string) => {
+  const handleMontoChange = React.useCallback((value: string) => {
     if (value === '') {
-      setFormData({ ...formData, monto_pagado: 0 });
+      setFormData(prev => ({ ...prev, monto_pagado: 0 }));
       return;
     }
 
-    const parsed = parseFloat(value);
-    setFormData({
-      ...formData,
+    const parsed = value === '' ? 0 : parseFloat(value);
+    setFormData(prev => ({
+      ...prev,
       monto_pagado: Number.isFinite(parsed) ? parsed : 0,
-    });
-  };
+    }));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,8 +214,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return;
     }
 
-    setErrorMsg(null);
     setIsUploading(true);
+    setErrorMsg(null);
 
     try {
       let cloudinaryData = {};
@@ -282,364 +283,268 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="overflow-hidden rounded-2xl border-none p-0 sm:max-w-[500px]">
-        <div className="bg-emerald-600 p-6 text-white">
-          <DialogHeader>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="rounded-lg bg-white/20 p-2">
-                <Receipt className="h-5 w-5 text-white" />
-              </div>
-              <DialogTitle className="text-xl font-bold">
-                Registrar Pago Realizado
-              </DialogTitle>
+      <DialogContent showCloseButton={false} className="max-w-[calc(100vw-16px)] sm:max-w-xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl max-h-[70dvh] sm:max-h-[90dvh] h-auto flex flex-col">
+        <DialogHeader className="p-4 md:p-6 bg-emerald-600 text-white relative shrink-0">
+          <div className="absolute top-0 right-0 p-6 opacity-10">
+            <Receipt className="w-24 h-24" />
+          </div>
+          <DialogClose onClick={onClose} className="absolute right-4 top-4 rounded-full p-2 text-white/70 hover:text-white hover:bg-white/15 transition-all z-50">
+            <X className="w-5 h-5" />
+          </DialogClose>
+          
+          <div className="flex items-center gap-2 mb-1">
+            <div className="rounded-lg bg-white/20 p-1.5">
+              <Receipt className="h-4 w-4 text-white" />
             </div>
+            <DialogTitle className="text-xl md:text-2xl font-black tracking-tighter">
+              Registrar Pago
+            </DialogTitle>
+          </div>
 
-            <div
-              className={`mb-3 inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${vencimientoUI.className}`}
-            >
-              {vencimientoUI.icon}
-              <span>{vencimientoUI.label}</span>
-            </div>
+          <div
+            className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${vencimientoUI.className}`}
+          >
+            {vencimientoUI.icon}
+            <span>{vencimientoUI.label}</span>
+          </div>
 
-            <DialogDescription className="mt-1 flex flex-col gap-2 text-emerald-50 opacity-90">
-              <span className="flex items-center justify-between text-sm">
+          <DialogDescription asChild className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-emerald-50 opacity-90">
+            <div>
+              <div className="flex items-center justify-between text-[11px]">
                 <span>Monto base:</span>
                 <span className="font-bold">${montoBase.toLocaleString()}</span>
-              </span>
+              </div>
 
-              {saldoAFavorAplicado > 0 && (
-                <span className="flex items-center justify-between rounded-lg bg-white/10 px-2 py-1 text-xs">
-                  <span className="flex items-center gap-1">
-                    <Wallet className="h-3 w-3" />
-                    Saldo a favor aplicado
-                  </span>
-                  <span className="font-bold">
-                    -${saldoAFavorAplicado.toLocaleString()}
-                  </span>
-                </span>
-              )}
-
-              <span className="flex items-center justify-between text-sm">
-                <span>Monto a pagar este mes:</span>
-                <span className="font-black text-base">
+              <div className="flex items-center justify-between text-[11px]">
+                <span>Monto a pagar:</span>
+                <span className="font-black text-xs">
                   ${montoExigible.toLocaleString()}
                 </span>
-              </span>
+              </div>
+
+              {saldoAFavorAplicado > 0 && (
+                <div className="col-span-2 flex items-center justify-between rounded-lg bg-white/10 px-2 py-0.5 text-[10px]">
+                  <span className="flex items-center gap-1">
+                    <Wallet className="h-3 w-3" />
+                    Saldo aplicado: <span className="font-bold">-${saldoAFavorAplicado.toLocaleString()}</span>
+                  </span>
+                </div>
+              )}
 
               {totalAbonado > 0 && (
-                <>
-                  <span className="flex items-center justify-between text-[11px]">
-                    <span>Total abonado:</span>
-                    <span className="font-bold">
-                      ${totalAbonado.toLocaleString()}
-                    </span>
-                  </span>
-
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/20">
+                <div className="col-span-2 space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span>Total abonado: <span className="font-bold">${totalAbonado.toLocaleString()}</span></span>
+                    <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
+                  </div>
+                  <div className="h-1 overflow-hidden rounded-full bg-white/20">
                     <div
                       className="h-full bg-white transition-all duration-500"
                       style={{ width: `${porcentajePagado}%` }}
                     />
                   </div>
-                </>
+                </div>
               )}
-
-              <span className="mt-1 flex items-center justify-between border-t border-white/10 pt-2 text-xs">
-                <span>Restante real:</span>
-                <span className="text-sm font-black">
-                  ${restanteReal.toLocaleString()}
-                </span>
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6">
-          {errorMsg && (
-            <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-[10px] font-bold text-red-600">
-              <span className="flex-1 uppercase">{errorMsg}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 rounded-full hover:bg-red-200"
-                onClick={() => setErrorMsg(null)}
-              >
-                <X className="h-3 w-3" />
-              </Button>
             </div>
-          )}
+          </DialogDescription>
+        </DialogHeader>
 
-          {(saldoAFavorAplicado > 0 || nuevoSaldoAFavorPreview > 0 || saldoPendientePostPago > 0) && (
-            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Crédito aplicado
-                </p>
-                <p className="mt-1 text-sm font-black text-emerald-700">
-                  ${saldoAFavorAplicado.toLocaleString()}
-                </p>
+        <div className="flex-1 overflow-y-auto px-5 py-4 md:px-8 custom-scrollbar">
+          <form id="payment-form" onSubmit={handleSubmit} className="space-y-4 pb-20 sm:pb-4">
+            {errorMsg && (
+              <div className="animate-in fade-in slide-in-from-top-1 flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 p-2 text-[10px] font-bold text-red-600">
+                <span className="flex-1 uppercase">{errorMsg}</span>
+                <X className="h-3 w-3 cursor-pointer" onClick={() => setErrorMsg(null)} />
               </div>
+            )}
 
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Restante luego del pago
-                </p>
-                <p className="mt-1 text-sm font-black text-slate-900">
-                  ${saldoPendientePostPago.toLocaleString()}
-                </p>
+            {(saldoAFavorAplicado > 0 || nuevoSaldoAFavorPreview > 0 || saldoPendientePostPago > 0) && (
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2">
+                <div className="text-center">
+                  <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Crédito</p>
+                  <p className="text-[11px] font-black text-emerald-700">${saldoAFavorAplicado.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Restante</p>
+                  <p className="text-[11px] font-black text-slate-900">${saldoPendientePostPago.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">A Favor</p>
+                  <p className="text-[11px] font-black text-amber-600">${nuevoSaldoAFavorPreview.toLocaleString()}</p>
+                </div>
               </div>
+            )}
 
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Nuevo saldo a favor
-                </p>
-                <p className="mt-1 text-sm font-black text-amber-600">
-                  ${nuevoSaldoAFavorPreview.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <Calendar className="h-3 w-3" /> Fecha de Pago
-              </Label>
-              <Input
-                type="date"
-                value={formData.fecha_pago}
-                onChange={(e) =>
-                  setFormData({ ...formData, fecha_pago: e.target.value })
-                }
-                required
-                className="border-none bg-slate-50 focus-visible:ring-emerald-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Monto Pagado
-              </Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                  $
-                </span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  <Calendar className="h-3 w-3" /> Fecha
+                </Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.monto_pagado}
-                  onChange={(e) => handleMontoChange(e.target.value)}
+                  type="date"
+                  value={formData.fecha_pago}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fecha_pago: e.target.value })
+                  }
                   required
-                  className="border-none bg-slate-50 pl-7 font-black text-emerald-700 focus-visible:ring-emerald-500"
+                  className="h-10 text-xs border-none bg-slate-50 focus-visible:ring-emerald-500 rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  Monto Pago
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={formData.monto_pagado}
+                    onChange={(e) => handleMontoChange(e.target.value)}
+                    required
+                    className="h-10 border-none bg-slate-50 pl-7 font-black text-emerald-700 focus-visible:ring-emerald-500 rounded-xl text-base"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Período</Label>
+                <div className="flex gap-1">
+                  <Select
+                    value={formData.periodo_mes.toString()}
+                    onValueChange={(v) => setFormData({ ...formData, periodo_mes: parseInt(v) })}
+                  >
+                    <SelectTrigger className="h-10 text-[11px] border-none bg-slate-50 focus-visible:ring-emerald-500 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {MONTHS.map((m, i) => (
+                        <SelectItem key={m} value={(i + 1).toString()} className="text-xs">{m.slice(0,3)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formData.periodo_anio.toString()}
+                    onValueChange={(v) => setFormData({ ...formData, periodo_anio: parseInt(v) })}
+                  >
+                    <SelectTrigger className="h-10 text-[11px] border-none bg-slate-50 focus-visible:ring-emerald-500 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                        <SelectItem key={y} value={y.toString()} className="text-xs">{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  <CreditCard className="h-3 w-3" /> Medio
+                </Label>
+                <Select
+                  value={formData.forma_pago}
+                  onValueChange={(v) => setFormData({ ...formData, forma_pago: v })}
+                >
+                  <SelectTrigger className="h-10 text-[11px] border-none bg-slate-50 focus:ring-emerald-500 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {PAYMENT_METHODS.map((m) => (
+                      <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  <Landmark className="h-3 w-3" /> Entidad
+                </Label>
+                <Input
+                  value={formData.entidad_pago}
+                  onChange={(e) => setFormData({ ...formData, entidad_pago: e.target.value })}
+                  placeholder="Ej: Santander, MP..."
+                  className="h-10 text-xs border-none bg-slate-50 rounded-xl"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Referencia</Label>
+                <Input
+                  value={formData.referencia_pago}
+                  onChange={(e) => setFormData({ ...formData, referencia_pago: e.target.value })}
+                  placeholder="Nro operación"
+                  className="h-10 text-xs border-none bg-slate-50 rounded-xl"
                 />
               </div>
             </div>
-          </div>
 
-          {nuevoSaldoAFavorPreview > 0 && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
-              <ArrowRightLeft className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                Estás pagando de más. Si confirmás así, se generará un saldo a favor de{' '}
-                <span className="font-bold">
-                  ${nuevoSaldoAFavorPreview.toLocaleString()}
-                </span>{' '}
-                para el próximo período.
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Mes del Período
-              </Label>
-              <Select
-                value={formData.periodo_mes.toString()}
-                onValueChange={(v) => setFormData({ ...formData, periodo_mes: parseInt(v) })}
-              >
-                <SelectTrigger className="border-none bg-slate-50 focus-visible:ring-emerald-500">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map((m, i) => (
-                    <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Año del Período
-              </Label>
-              <Select
-                value={formData.periodo_anio.toString()}
-                onValueChange={(v) => setFormData({ ...formData, periodo_anio: parseInt(v) })}
-              >
-                <SelectTrigger className="border-none bg-slate-50 focus-visible:ring-emerald-500">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
-                    <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <CreditCard className="h-3 w-3" /> Medio de Pago
-            </Label>
-            <Select
-              value={formData.forma_pago}
-              onValueChange={(v) => setFormData({ ...formData, forma_pago: v })}
-            >
-              <SelectTrigger className="h-11 border-none bg-slate-50 focus:ring-emerald-500">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_METHODS.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <Landmark className="h-3 w-3" /> Entidad / Banco
+            <div className="space-y-1">
+              <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                <Info className="h-3 w-3" /> Observaciones
               </Label>
               <Input
-                value={formData.entidad_pago}
-                onChange={(e) =>
-                  setFormData({ ...formData, entidad_pago: e.target.value })
-                }
-                placeholder="Ej: Santander, MP..."
-                className="border-none bg-slate-50 focus-visible:ring-emerald-500"
+                value={formData.observaciones}
+                onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                placeholder="Notas sobre el pago..."
+                className="h-10 text-xs border-none bg-slate-50 rounded-xl"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Referencia #
+            <div className="pb-2 space-y-1">
+              <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                <FileUp className="h-3 w-3" /> Comprobante
               </Label>
-              <Input
-                value={formData.referencia_pago}
-                onChange={(e) =>
-                  setFormData({ ...formData, referencia_pago: e.target.value })
-                }
-                placeholder="Nro operación"
-                className="border-none bg-slate-50 focus-visible:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <Info className="h-3 w-3" /> Observaciones
-            </Label>
-            <Input
-              value={formData.observaciones}
-              onChange={(e) =>
-                setFormData({ ...formData, observaciones: e.target.value })
-              }
-              placeholder="Alguna nota sobre el pago..."
-              className="border-none bg-slate-50 focus-visible:ring-emerald-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <FileUp className="h-3 w-3" /> Comprobante
-            </Label>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*,application/pdf"
-              className="hidden"
-            />
-
-            {!selectedFile ? (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 shadow-sm transition-all hover:border-emerald-400 hover:bg-emerald-50/30"
-              >
-                <div className="rounded-full bg-white p-3 shadow-sm transition-transform group-hover:scale-110">
-                  <FileUp className="h-8 w-8 text-slate-400 transition-colors group-hover:text-emerald-500" />
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,application/pdf" className="hidden" />
+              {!selectedFile ? (
+                <div onClick={() => fileInputRef.current?.click()} className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-100 bg-slate-50 p-3 transition-all hover:border-emerald-400 hover:bg-emerald-50/20">
+                  <FileUp className="h-4 w-4 text-slate-400" />
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Subir Archivo</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 transition-colors group-hover:text-emerald-700">
-                    Subir Comprobante
-                  </p>
-                  <p className="mt-1 text-[9px] font-medium text-slate-400">
-                    Arrastra aquí o haz clic para buscar
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="rounded-lg bg-emerald-100 p-2">
-                    <Check className="h-4 w-4 text-emerald-600" />
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="truncate text-xs font-bold text-emerald-900">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-[10px] font-medium text-emerald-600">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedFile(null)}
-                  className="h-8 w-8 rounded-lg text-emerald-400 hover:bg-emerald-100 hover:text-emerald-600"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2 pt-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              disabled={isUploading}
-              className="flex-1 rounded-xl border border-slate-100"
-            >
-              CANCELAR
-            </Button>
-            <Button
-              type="submit"
-              disabled={!canSubmit}
-              className="flex-1 rounded-xl bg-emerald-600 px-8 font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  SUBIENDO...
-                </>
               ) : (
-                'CONFIRMAR PAGO'
+                <div className="flex items-center justify-between rounded-xl bg-emerald-50 p-2">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <Check className="h-3 w-3 text-emerald-600" />
+                    <p className="truncate text-[10px] font-bold text-emerald-900">{selectedFile.name}</p>
+                  </div>
+                  <X className="h-3 w-3 cursor-pointer text-emerald-400" onClick={() => setSelectedFile(null)} />
+                </div>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+            </div>
+          </form>
+        </div>
+
+        <DialogFooter className="p-4 bg-slate-50 flex gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={isUploading}
+            className="flex-1 rounded-xl font-black uppercase text-[10px] tracking-widest border-slate-200 text-slate-500 h-10 active:scale-95 transition-transform"
+          >
+            CANCELAR
+          </Button>
+          <Button
+            form="payment-form"
+            type="submit"
+            disabled={!canSubmit || isUploading}
+            className="flex-[2] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-100 h-10 active:scale-95 transition-transform"
+          >
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'CONFIRMAR PAGO'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

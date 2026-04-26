@@ -26,6 +26,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+import { cleanPhoneNumber, generateWhatsAppLink } from '../utils/phoneUtils';
+
 interface IncomeListProps {
   incomes: Income[];
   expenses: Expense[];
@@ -35,6 +37,8 @@ interface IncomeListProps {
   onDelete: (id: string) => void;
   searchTerm?: string;
   onSearchChange?: (val: string) => void;
+  paymentStatusFilter?: 'all' | 'debtors' | 'paid';
+  onPaymentStatusFilterChange?: (val: 'all' | 'debtors' | 'paid') => void;
 }
 
 const isClientInactive = (income: Income) => {
@@ -82,14 +86,20 @@ export const IncomeList: React.FC<IncomeListProps> = ({
   onDelete,
   searchTerm: externalSearchTerm,
   onSearchChange,
+  paymentStatusFilter: externalPaymentStatusFilter,
+  onPaymentStatusFilterChange,
 }) => {
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const [internalPaymentStatusFilter, setInternalPaymentStatusFilter] = useState<'all' | 'debtors' | 'paid'>('all');
   const [clientFilter, setClientFilter] = useState('Todos');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
 
   const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
   const setSearchTerm = onSearchChange || setInternalSearchTerm;
+  
+  const paymentStatusFilter = externalPaymentStatusFilter !== undefined ? externalPaymentStatusFilter : internalPaymentStatusFilter;
+  const setPaymentStatusFilter = onPaymentStatusFilterChange || setInternalPaymentStatusFilter;
 
   const filteredIncomes = useMemo(() => {
     const normalizedSearch = searchTerm.toLowerCase().trim();
@@ -686,6 +696,16 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         <div className="flex gap-2 w-full md:w-auto">
           <select
             className="bg-slate-50 border-none text-sm px-3 py-2 rounded-xl focus:outline-none text-slate-700 min-w-[140px]"
+            value={paymentStatusFilter}
+            onChange={(event) => setPaymentStatusFilter(event.target.value as any)}
+          >
+            <option value="all">Estado: Todos</option>
+            <option value="debtors">Estado: Deudores</option>
+            <option value="paid">Estado: Al día</option>
+          </select>
+
+          <select
+            className="bg-slate-50 border-none text-sm px-3 py-2 rounded-xl focus:outline-none text-slate-700 min-w-[140px]"
             value={clientFilter}
             onChange={(event) => setClientFilter(event.target.value)}
           >
@@ -698,21 +718,21 @@ export const IncomeList: React.FC<IncomeListProps> = ({
       </div>
 
       <div className="md:hidden space-y-8">
-        {renderCardList(
+        {(paymentStatusFilter === 'all' || paymentStatusFilter === 'debtors') && renderCardList(
           pendingIncomes,
           'Cobranzas pendientes',
           <Calendar className="w-4 h-4" />,
           'No hay cobros pendientes',
         )}
 
-        {renderCardList(
+        {(paymentStatusFilter === 'all' || paymentStatusFilter === 'paid') && renderCardList(
           collectedIncomes,
           'Historial de cobros',
           <TrendingUp className="w-4 h-4" />,
           'No se registran cobros finalizados',
         )}
 
-        {inactiveIncomes.length > 0 && renderCardList(
+        {paymentStatusFilter === 'all' && inactiveIncomes.length > 0 && renderCardList(
           inactiveIncomes,
           'Clientes inactivos',
           <Users className="w-4 h-4 opacity-50" />,
@@ -721,21 +741,21 @@ export const IncomeList: React.FC<IncomeListProps> = ({
       </div>
 
       <div className="hidden md:block space-y-8">
-        {renderTable(
+        {(paymentStatusFilter === 'all' || paymentStatusFilter === 'debtors') && renderTable(
           pendingIncomes,
           'Cobranzas pendientes',
           <Calendar className="w-4 h-4" />,
           'No hay cobros pendientes registrados',
         )}
 
-        {renderTable(
+        {(paymentStatusFilter === 'all' || paymentStatusFilter === 'paid') && renderTable(
           collectedIncomes,
           'Historial de cobros',
           <TrendingUp className="w-4 h-4" />,
           'No se registran cobros finalizados aún',
         )}
 
-        {inactiveIncomes.length > 0 && renderTable(
+        {paymentStatusFilter === 'all' && inactiveIncomes.length > 0 && renderTable(
           inactiveIncomes,
           'Clientes inactivos',
           <Users className="w-4 h-4 opacity-50" />,

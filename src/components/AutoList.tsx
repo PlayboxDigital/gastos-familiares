@@ -180,12 +180,14 @@ export const AutoList: React.FC = () => {
 
       {/* Modal Nuevo Auto */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl p-8">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">Nuevo Vehículo</DialogTitle>
-            <DialogDescription className="font-medium text-slate-500">Agrega un nuevo auto para realizar seguimiento de sus gastos.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateAuto} className="space-y-4 py-4">
+        <DialogContent className="max-md:h-auto max-md:max-h-[85dvh] max-md:p-0 max-md:gap-0 sm:max-w-[425px] overflow-hidden flex flex-col">
+          <div className="p-6 border-b shrink-0 pt-10 md:pt-6 bg-slate-50/50">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">Nuevo Vehículo</DialogTitle>
+              <DialogDescription className="font-medium text-slate-500">Agrega un nuevo auto para realizar seguimiento de sus gastos.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form id="new-auto-form" onSubmit={handleCreateAuto} className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
             <div className="space-y-2">
               <Label htmlFor="nombre" className="text-xs font-black uppercase text-slate-500 tracking-widest">Nombre (ej: Mi Auto)</Label>
               <Input 
@@ -193,17 +195,17 @@ export const AutoList: React.FC = () => {
                 value={newAuto.nombre} 
                 onChange={e => setNewAuto({...newAuto, nombre: e.target.value})}
                 required
-                className="bg-slate-50 border-none rounded-xl"
+                className="bg-slate-50 border-none rounded-xl h-12 font-bold"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="marca" className="text-xs font-black uppercase text-slate-500 tracking-widest">Marca</Label>
                 <Input 
                   id="marca" 
                   value={newAuto.marca} 
                   onChange={e => setNewAuto({...newAuto, marca: e.target.value})}
-                  className="bg-slate-50 border-none rounded-xl"
+                  className="bg-slate-50 border-none rounded-xl h-12 font-bold"
                 />
               </div>
               <div className="space-y-2">
@@ -212,7 +214,7 @@ export const AutoList: React.FC = () => {
                   id="modelo" 
                   value={newAuto.modelo} 
                   onChange={e => setNewAuto({...newAuto, modelo: e.target.value})}
-                  className="bg-slate-50 border-none rounded-xl"
+                  className="bg-slate-50 border-none rounded-xl h-12 font-bold"
                 />
               </div>
             </div>
@@ -222,7 +224,7 @@ export const AutoList: React.FC = () => {
                 id="patente" 
                 value={newAuto.patente} 
                 onChange={e => setNewAuto({...newAuto, patente: e.target.value})}
-                className="bg-slate-50 border-none rounded-xl"
+                className="bg-slate-50 border-none rounded-xl h-12 font-bold"
               />
             </div>
             <div className="space-y-2">
@@ -231,15 +233,15 @@ export const AutoList: React.FC = () => {
                 id="obs" 
                 value={newAuto.observaciones} 
                 onChange={e => setNewAuto({...newAuto, observaciones: e.target.value})}
-                className="bg-slate-50 border-none rounded-xl"
+                className="bg-slate-50 border-none rounded-xl h-12 font-medium"
               />
             </div>
-            <DialogFooter className="pt-6">
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-bold">
-                Guardar Auto
-              </Button>
-            </DialogFooter>
           </form>
+          <div className="p-4 md:p-6 border-t shrink-0 bg-white">
+            <Button form="new-auto-form" type="submit" className="w-full bg-slate-900 hover:bg-black text-white h-14 rounded-2xl font-black uppercase tracking-tight shadow-xl transition-all active:scale-95">
+              Guardar Auto
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
