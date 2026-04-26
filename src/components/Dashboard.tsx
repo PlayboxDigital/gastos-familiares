@@ -611,7 +611,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
-        <DialogContent showCloseButton={false} className="max-w-[calc(100vw-16px)] sm:max-w-xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl h-[82dvh] sm:h-auto flex flex-col">
+        <DialogContent showCloseButton={false} className="max-w-[calc(100vw-16px)] sm:max-w-xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl max-h-[75dvh] sm:h-auto flex flex-col">
           <DialogHeader className="p-6 md:p-8 bg-indigo-600 text-white relative shrink-0">
             <div className="absolute top-0 right-0 p-8 opacity-10">
               <Users className="w-32 h-32" />

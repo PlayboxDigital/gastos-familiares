@@ -809,8 +809,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 p-8">
+    <div className="h-[100dvh] bg-slate-50 flex flex-col md:flex-row relative overflow-hidden">
+      <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 p-8 sticky top-0 h-screen">
         <div className="flex items-center gap-3 mb-12">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 shrink-0">
             <Home className="text-white w-6 h-6" />
@@ -894,8 +894,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-[100dvh] overflow-hidden">
-        <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-30">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="md:hidden w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
               <Home className="text-white w-5 h-5" />
@@ -951,7 +951,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-32 md:pb-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto">
             {hasLegacyData && (
               <motion.div
@@ -1069,7 +1069,7 @@ export default function App() {
         </div>
       </main>
 
-      <nav className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1 flex justify-between items-center fixed bottom-0 left-0 right-0 z-40 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      <nav className="md:hidden bg-white/90 backdrop-blur-lg border-t border-slate-200/60 px-4 py-2 flex justify-between items-center fixed bottom-0 left-0 right-0 z-[60] pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.1),0_-8px_10px_-6px_rgba(0,0,0,0.1)]">
         <MobileNavLink
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}
@@ -1206,17 +1206,19 @@ export default function App() {
             <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
               Eliminar Gasto con Historial
             </DialogTitle>
-            <DialogDescription className="text-slate-500 font-medium pt-3 space-y-3">
-              <p>
-                Este gasto tiene <span className="font-bold text-blue-600">{deleteChoiceConfig.paymentsCount} pagos</span> registrados.
-              </p>
-              {deleteChoiceConfig.hasDuplicate && (
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-blue-800 text-sm">
-                  <p className="font-bold mb-1">¡Duplicado detectado!</p>
-                  <p>Parece ser un duplicado de: <span className="font-black italic">"{deleteChoiceConfig.duplicateName}"</span></p>
-                </div>
-              )}
-              <p>¿Qué deseas hacer?</p>
+            <DialogDescription asChild className="text-slate-500 font-medium pt-3 space-y-3">
+              <div>
+                <p>
+                  Este gasto tiene <span className="font-bold text-blue-600">{deleteChoiceConfig.paymentsCount} pagos</span> registrados.
+                </p>
+                {deleteChoiceConfig.hasDuplicate && (
+                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-blue-800 text-sm">
+                    <p className="font-bold mb-1">¡Duplicado detectado!</p>
+                    <p>Parece ser un duplicado de: <span className="font-black italic">"{deleteChoiceConfig.duplicateName}"</span></p>
+                  </div>
+                )}
+                <p>¿Qué deseas hacer?</p>
+              </div>
             </DialogDescription>
           </DialogHeader>
           
@@ -1307,13 +1309,15 @@ const MobileNavLink = ({
 }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center gap-1 flex-1 py-1 transition-colors ${
+    className={`flex flex-col items-center gap-1.5 flex-1 py-2 rounded-xl transition-all active:scale-95 ${
       active ? 'text-blue-600' : 'text-slate-400'
     }`}
   >
-    <div className={`p-1.5 rounded-lg ${active ? 'bg-blue-50' : ''}`}>
+    <div className={`p-2 rounded-xl transition-colors ${active ? 'bg-blue-50/50' : 'group-hover:bg-slate-50'}`}>
       {icon}
     </div>
-    <span className="text-[10px] font-bold">{label}</span>
+    <span className={`text-[10px] font-bold tracking-tight transition-all ${active ? 'opacity-100 scale-105' : 'opacity-70'}`}>
+      {label}
+    </span>
   </button>
 );

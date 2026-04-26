@@ -89,7 +89,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-md:p-0 max-md:gap-0 sm:max-w-[500px] overflow-hidden flex flex-col">
+      <DialogContent className="max-md:p-0 max-md:gap-0 sm:max-w-[500px] max-md:max-h-[75dvh] overflow-hidden flex flex-col">
         <div className="flex-1 overflow-y-auto modal-scroll px-6 md:px-8 py-6">
           <DialogHeader className="mb-6 pt-4 md:pt-0">
             <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">
