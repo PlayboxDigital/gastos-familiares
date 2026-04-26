@@ -308,45 +308,43 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
             <span>{vencimientoUI.label}</span>
           </div>
 
-          <DialogDescription asChild className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-emerald-50 opacity-90">
-            <div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span>Monto base:</span>
-                <span className="font-bold">${montoBase.toLocaleString()}</span>
-              </div>
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-emerald-50 opacity-90">
+            <div className="flex items-center justify-between text-[11px]">
+              <span>Monto base:</span>
+              <span className="font-bold">${montoBase.toLocaleString()}</span>
+            </div>
 
-              <div className="flex items-center justify-between text-[11px]">
-                <span>Monto a pagar:</span>
-                <span className="font-black text-xs">
-                  ${montoExigible.toLocaleString()}
+            <div className="flex items-center justify-between text-[11px]">
+              <span>Monto a pagar:</span>
+              <span className="font-black text-xs">
+                ${montoExigible.toLocaleString()}
+              </span>
+            </div>
+
+            {saldoAFavorAplicado > 0 && (
+              <div className="col-span-2 flex items-center justify-between rounded-lg bg-white/10 px-2 py-0.5 text-[10px]">
+                <span className="flex items-center gap-1">
+                  <Wallet className="h-3 w-3" />
+                  Saldo aplicado: <span className="font-bold">-${saldoAFavorAplicado.toLocaleString()}</span>
                 </span>
               </div>
+            )}
 
-              {saldoAFavorAplicado > 0 && (
-                <div className="col-span-2 flex items-center justify-between rounded-lg bg-white/10 px-2 py-0.5 text-[10px]">
-                  <span className="flex items-center gap-1">
-                    <Wallet className="h-3 w-3" />
-                    Saldo aplicado: <span className="font-bold">-${saldoAFavorAplicado.toLocaleString()}</span>
-                  </span>
+            {totalAbonado > 0 && (
+              <div className="col-span-2 space-y-1">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span>Total abonado: <span className="font-bold">${totalAbonado.toLocaleString()}</span></span>
+                  <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
                 </div>
-              )}
-
-              {totalAbonado > 0 && (
-                <div className="col-span-2 space-y-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span>Total abonado: <span className="font-bold">${totalAbonado.toLocaleString()}</span></span>
-                    <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
-                  </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-white/20">
-                    <div
-                      className="h-full bg-white transition-all duration-500"
-                      style={{ width: `${porcentajePagado}%` }}
-                    />
-                  </div>
+                <div className="h-1 overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full bg-white transition-all duration-500"
+                    style={{ width: `${porcentajePagado}%` }}
+                  />
                 </div>
-              )}
-            </div>
-          </DialogDescription>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 md:px-8 custom-scrollbar">
