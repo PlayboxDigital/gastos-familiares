@@ -951,7 +951,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-32 md:pb-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-36 md:pb-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto">
             {hasLegacyData && (
               <motion.div
@@ -1069,7 +1069,7 @@ export default function App() {
         </div>
       </main>
 
-      <nav className="md:hidden bg-white/90 backdrop-blur-lg border-t border-slate-200/60 px-4 py-2 flex justify-between items-center fixed bottom-0 left-0 right-0 z-[60] pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.1),0_-8px_10px_-6px_rgba(0,0,0,0.1)]">
+      <nav className="md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/80 px-2 py-1.5 flex justify-between items-stretch fixed bottom-0 left-0 right-0 z-[50] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.08),0_-2px_8px_-4px_rgba(0,0,0,0.04)]">
         <MobileNavLink
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}
@@ -1309,14 +1309,16 @@ const MobileNavLink = ({
 }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center gap-1.5 flex-1 py-2 rounded-xl transition-all active:scale-95 ${
-      active ? 'text-blue-600' : 'text-slate-400'
+    className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[52px] py-1.5 px-1 rounded-xl transition-all duration-200 active:scale-95 touch-manipulation ${
+      active ? 'text-blue-600 bg-blue-50/80' : 'text-slate-400 hover:bg-slate-50/80 hover:text-slate-600'
     }`}
   >
-    <div className={`p-2 rounded-xl transition-colors ${active ? 'bg-blue-50/50' : 'group-hover:bg-slate-50'}`}>
+    <div className={`transition-colors ${active ? '' : ''}`}>
       {icon}
     </div>
-    <span className={`text-[10px] font-bold tracking-tight transition-all ${active ? 'opacity-100 scale-105' : 'opacity-70'}`}>
+    <span className={`text-[11px] font-semibold tracking-wide leading-tight ${
+      active ? 'text-blue-600' : 'text-slate-500'
+    }`}>
       {label}
     </span>
   </button>
