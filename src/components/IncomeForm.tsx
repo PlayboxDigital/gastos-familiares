@@ -186,7 +186,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-md:h-auto max-md:max-h-[95dvh] max-md:p-0 max-md:gap-0 sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden p-0 flex flex-col gap-0 border-none sm:border shadow-2xl">
+      <DialogContent className="max-md:h-auto max-md:max-h-[95dvh] max-md:p-0 max-md:gap-0 sm:max-w-5xl md:max-w-6xl lg:max-w-7xl sm:rounded-[2.5rem] overflow-hidden p-0 flex flex-col gap-0 border-none sm:border shadow-2xl w-[95vw] max-w-none">
         <div className="p-6 md:p-8 border-b bg-slate-50/50 shrink-0 pt-10 md:pt-8">
           <DialogHeader>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -217,10 +217,10 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
             </div>
           </DialogHeader>
         </div>
-        <form id="income-form" onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 modal-scroll">
+        <form id="income-form" onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col overflow-x-hidden">
+          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 modal-scroll overflow-x-hidden">
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 overflow-x-hidden">
               {/* IZQUIERDA: COMERCIAL */}
               <div className="space-y-6">
                 <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
@@ -279,7 +279,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">B. Plan y Cobro</h3>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-x-hidden">
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Monto Mensual</Label>
                       <div className="flex gap-2">
@@ -397,7 +397,7 @@ export const IncomeForm: React.FC<IncomeFormProps> = ({ isOpen, onClose, onSubmi
 
                     <Separator className="bg-slate-100" />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-x-hidden">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <Database className="w-3 h-3 text-emerald-500" />
