@@ -5,7 +5,7 @@ import { es } from 'date-fns/locale';
 import { 
   X, Phone, Globe, Database, Github, Code, TrendingUp, Mail, 
   ExternalLink, Edit2, Calendar, DollarSign, Info, Shield, Server, Users,
-  Plus, CheckCircle2, AlertTriangle, Loader2, Trash2
+  Plus, CheckCircle2, AlertTriangle, AlertCircle, Loader2, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '@/components/ui/button';
@@ -129,6 +129,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   const [comprobanteUrl, setComprobanteUrl] = useState('');
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [isUploadingComprobante, setIsUploadingComprobante] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (editingPago) {
@@ -178,6 +179,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
   const handleEditPago = React.useCallback((pago: IngresoPago) => {
     setEditingPago(pago);
     setShowForm(true);
+    setFormError(null);
 
     setTimeout(() => {
       document.querySelector('.modal-scroll')?.scrollTo({
@@ -243,10 +245,11 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
     if (isRegistering || isUploadingComprobante || montoPagado < 0) return;
 
     if (formaPago === 'Transferencia' && !comprobanteFile && !comprobanteUrl.trim()) {
-      alert("Debes subir comprobante para transferencia");
+      setFormError("Debes subir comprobante para transferencia");
       return;
     }
 
+    setFormError(null);
     setIsRegistering(true);
     setIsUploadingComprobante(true);
 
@@ -291,9 +294,10 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
       setComprobanteFile(null);
       setObservacion('');
       setShowForm(false);
+      setFormError(null);
     } catch (error) {
       console.error("Error al procesar pago:", error);
-      alert(error instanceof Error ? error.message : "Error desconocido");
+      setFormError(error instanceof Error ? error.message : "Error desconocido");
     } finally {
       setIsUploadingComprobante(false);
       setIsRegistering(false);
@@ -743,6 +747,12 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
                         </div>
                       </div>
                       <div className="flex justify-end pt-2">
+                        {formError && (
+                          <div className="w-full mb-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-bold flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            {formError}
+                          </div>
+                        )}
                         <Button 
                           disabled={isRegistering || isUploadingComprobante}
                           className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-12 px-8 font-black uppercase text-xs tracking-wider shadow-lg shadow-blue-200 gap-2"

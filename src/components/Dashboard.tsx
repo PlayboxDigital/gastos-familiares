@@ -377,6 +377,69 @@ export const Dashboard: React.FC<DashboardProps> = ({
       .slice(0, 5);
   }, [pagosPendientes, history, currentMonth]);
 
+  // Unificado: Pagos pendientes con estado y orden
+  const pagosPendientesUnified = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return pagosPendientes.map(e => {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth() + 1;
+      const paid = history.filter(h => h.gasto_id === e.id && h.periodo_anio === year && h.periodo_mes === month).reduce((s, h) => s + h.monto_pagado, 0);
+      const saldo = Math.max(0, getMontoExigible(e as ExpenseWithCredit) - paid);
+      const tienePagoParcial = paid > 0 && saldo > 0;
+
+      // Calcular fecha de vencimiento
+      let deadlineDate: Date;
+      if (e.dia_vencimiento) {
+        deadlineDate = new Date(today.getFullYear(), today.getMonth(), e.dia_vencimiento);
+      } else {
+        deadlineDate = parseISO(e.fecha);
+      }
+      deadlineDate.setHours(0, 0, 0, 0);
+
+      const diff = differenceInDays(deadlineDate, today);
+      const isVencido = isBefore(deadlineDate, today);
+      const isHoy = isSameDay(deadlineDate, today);
+
+      // Determinar estado
+      let status: 'VENCIDO' | 'PENDIENTE' | 'PARCIAL';
+      if (tienePagoParcial) {
+        status = 'PARCIAL';
+      } else if (isVencido) {
+        status = 'VENCIDO';
+      } else {
+        status = 'PENDIENTE';
+      }
+
+      // Orden: 0=vencido, 1=hoy, 2=pronto/pendiente
+      let urgencyOrder: number;
+      if (isVencido) urgencyOrder = 0;
+      else if (isHoy) urgencyOrder = 1;
+      else urgencyOrder = 2;
+
+      return {
+        ...e,
+        deadlineDate,
+        diff,
+        isVencido,
+        isHoy,
+        status,
+        urgencyOrder,
+        saldo
+      };
+    })
+    .sort((a, b) => {
+      // Primero por urgencia (vencido -> hoy -> pendiente)
+      if (a.urgencyOrder !== b.urgencyOrder) {
+        return a.urgencyOrder - b.urgencyOrder;
+      }
+      // Luego por fecha ascendente
+      return a.deadlineDate.getTime() - b.deadlineDate.getTime();
+    })
+    .slice(0, 8);
+  }, [pagosPendientes, history, currentMonth]);
+
   const pendingEssentialExpenses = useMemo(() => {
     return monthlyExpenses.filter((e) => {
       const esEsencial =
@@ -774,7 +837,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
           <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
             <div className="flex items-center justify-between">
@@ -846,55 +909,75 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-rose-500 text-white shadow-lg shadow-rose-200">
                   <Calendar className="h-4 w-4" />
                 </div>
-                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Próximos Vencimientos</CardTitle>
+                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">
+                  Pagos pendientes
+                </CardTitle>
               </div>
+              {pagosPendientesUnified.length > 0 && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
+                  {pagosPendientesUnified.length}
+                </span>
+              )}
             </div>
           </CardHeader>
+
           <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
             <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
-              {proximosVencimientos.length > 0 ? (
-                proximosVencimientos.map((e) => {
-                  const saldo = Math.max(
-                    0,
-                    getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
-                  );
-
-                  const urgencyLabels = {
-                    vencido: { text: 'Vencido', color: 'text-rose-600 bg-rose-50 border-rose-100', icon: <Flame className="w-2.5 h-2.5" /> },
-                    hoy: { text: 'Hoy', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: <Zap className="w-2.5 h-2.5" /> },
-                    pronto: { text: `En ${e.diff}d`, color: 'text-blue-600 bg-blue-50 border-blue-100', icon: <Activity className="w-2.5 h-2.5" /> }
-                  };
-
-                  const config = urgencyLabels[e.urgency];
+              {pagosPendientesUnified.length > 0 ? (
+                pagosPendientesUnified.map((e) => {
+                  const config =
+                    e.status === 'VENCIDO'
+                      ? {
+                          text: 'VENCIDO',
+                          color: 'text-rose-600 bg-rose-50 border-rose-100',
+                          icon: <Flame className="w-2.5 h-2.5" />,
+                        }
+                      : e.status === 'PARCIAL'
+                      ? {
+                          text: 'PARCIAL',
+                          color: 'text-blue-600 bg-blue-50 border-blue-100',
+                          icon: <Activity className="w-2.5 h-2.5" />,
+                        }
+                      : {
+                          text: 'PENDIENTE DE PAGO',
+                          color: 'text-amber-600 bg-amber-50 border-amber-100',
+                          icon: <Zap className="w-2.5 h-2.5" />,
+                        };
 
                   return (
                     <button
                       key={e.id}
                       type="button"
                       onClick={() => onQuickPayExpense?.(e)}
-                      className="group w-full flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-slate-50 text-left active:scale-[0.98]"
+                      className={`group w-full flex items-center justify-between rounded-xl border p-3 transition-all hover:shadow-sm text-left active:scale-[0.98] ${config.color}`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black text-[10px] ${config.color}`}>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/80 font-black text-[10px] shadow-sm">
                           {e.subcategoria?.charAt(0) || '?'}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{e.subcategoria}</p>
+                          <p className="truncate text-[13px] font-black leading-tight">
+                            {e.subcategoria}
+                          </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className={`flex items-center gap-0.5 rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider border ${config.color}`}>
                               {config.icon}
                               {config.text}
                             </span>
-                            <span className="text-[9px] font-bold text-slate-400 italic">
-                               {format(e.deadlineDate, "dd MMM", { locale: es })}
+                            <span className="text-[9px] font-bold opacity-70 italic">
+                              {format(e.deadlineDate, 'dd MMM', { locale: es })}
                             </span>
                           </div>
                         </div>
                       </div>
+
                       <div className="text-right ml-2 shrink-0">
-                        <p className="text-[13px] font-black tabular-nums text-slate-900">
-                          ${saldo.toLocaleString()}
+                        <p className="text-[13px] font-black tabular-nums">
+                          ${e.saldo.toLocaleString()}
                         </p>
+                        <span className="text-[10px] font-black underline underline-offset-2">
+                          Pagar
+                        </span>
                       </div>
                     </button>
                   );
@@ -902,70 +985,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                   <CheckCircle2 className="h-10 w-10 mb-2 opacity-20" />
-                  <p className="text-[11px] font-bold italic">Sin vencimientos...</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col h-full">
-          <CardHeader className="p-4 md:px-5 md:pt-5 md:pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 md:gap-2.5">
-                <div className="flex h-7 w-7 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-xl bg-amber-500 text-white shadow-lg shadow-amber-200">
-                  <Activity className="h-4 w-4" />
-                </div>
-                <CardTitle className="text-sm md:text-base font-black text-slate-900 tracking-tight">Pendientes</CardTitle>
-              </div>
-              {pagosPendientes.length > 0 && (
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-600 border border-amber-100">
-                  {pagosPendientes.length}
-                </span>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 md:px-4 pb-4 pt-0 flex-1 overflow-hidden">
-            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
-              {pagosPendientes.length > 0 ? (
-                pagosPendientes.slice(0, 8).map((e) => {
-                  const saldo = Math.max(
-                    0,
-                    getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
-                  );
-
-                  return (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => onQuickPayExpense?.(e)}
-                      className="group w-full flex items-center justify-between rounded-xl border border-slate-50 bg-white p-3 transition-all hover:bg-amber-50/30 text-left active:scale-[0.98]"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 font-black text-slate-400 text-[10px] group-hover:bg-amber-100 group-hover:text-amber-600">
-                          {e.subcategoria?.charAt(0) || '?'}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-[13px] font-black text-slate-900 leading-tight">{e.subcategoria}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="rounded px-1 py-0 text-[8px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 truncate group-hover:bg-white">
-                              {e.categoria}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right ml-2 shrink-0">
-                        <p className="text-[13px] font-black tabular-nums text-slate-900">
-                          ${saldo.toLocaleString()}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <Pizza className="h-10 w-10 mb-2 opacity-20" />
-                  <p className="text-[11px] font-bold italic">Todo al día...</p>
+                  <p className="text-[11px] font-bold italic">Todo al día</p>
                 </div>
               )}
             </div>
