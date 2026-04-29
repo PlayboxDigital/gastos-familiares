@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ExpenseList } from './components/ExpenseList';
 import { ExpenseForm } from './components/ExpenseForm';
@@ -37,6 +37,8 @@ import { IncomeList } from './components/IncomeList';
 import { IncomeForm } from './components/IncomeForm';
 import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
+
 import {
   Plus,
   LayoutDashboard,
@@ -176,6 +178,76 @@ export default function App() {
       }
     }
   }, []);
+
+  // --- PWA Install Banner State ---
+  const [showPwaBanner, setShowPwaBanner] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+
+  // Detect if app is installed or in standalone
+  const isStandalone = () => {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    );
+  };
+
+  // Detect iOS Safari
+  const isIOSSafari = () => {
+    const ua = window.navigator.userAgent;
+    return /iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|opera|edgios/i.test(ua);
+  };
+
+  useEffect(() => {
+    // No banner if sessionStorage says so
+    if (sessionStorage.getItem('pwa-banner-hide') === '1') return;
+    // No banner if already installed
+    if (isStandalone()) return;
+
+    // iOS Safari: show manual banner
+    if (isIOSSafari()) {
+      setIsIOS(true);
+      setShowPwaBanner(true);
+      return;
+    }
+
+    // Chrome/Android: listen for beforeinstallprompt
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowPwaBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
+  }, []);
+
+  // Hide banner if installed during session
+  useEffect(() => {
+    const handler = () => {
+      setShowPwaBanner(false);
+    };
+    window.addEventListener('appinstalled', handler);
+    return () => window.removeEventListener('appinstalled', handler);
+  }, []);
+
+  const handlePwaInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowPwaBanner(false);
+      }
+      setDeferredPrompt(null);
+    }
+  };
+
+  const handlePwaClose = () => {
+    setShowPwaBanner(false);
+    sessionStorage.setItem('pwa-banner-hide', '1');
+  };
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -1133,6 +1205,14 @@ export default function App() {
         }}
         onSubmit={handleAddDebt}
         debtToEdit={debtToEdit}
+      />
+
+      {/* PWA Install Banner */}
+      <PWAInstallBanner
+        open={showPwaBanner}
+        onClose={handlePwaClose}
+        onInstall={handlePwaInstall}
+        isIOS={isIOS}
       />
 
       <IncomeForm
