@@ -94,12 +94,64 @@ export const IncomeList: React.FC<IncomeListProps> = ({
   const [clientFilter, setClientFilter] = useState('Todos');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<'cliente' | 'monto' | 'estado' | 'saldo' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
   const setSearchTerm = onSearchChange || setInternalSearchTerm;
   
   const paymentStatusFilter = externalPaymentStatusFilter !== undefined ? externalPaymentStatusFilter : internalPaymentStatusFilter;
   const setPaymentStatusFilter = onPaymentStatusFilterChange || setInternalPaymentStatusFilter;
+
+  const handleSortChange = (column: 'cliente' | 'monto' | 'estado' | 'saldo') => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const applySorting = (data: Income[]) => {
+    if (!sortColumn) return data;
+
+    return [...data].sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+
+      switch (sortColumn) {
+        case 'cliente':
+          aVal = (a.cliente || '').toLowerCase();
+          bVal = (b.cliente || '').toLowerCase();
+          break;
+        case 'monto':
+          aVal = getMonthlyAmount(a);
+          bVal = getMonthlyAmount(b);
+          break;
+        case 'estado':
+          aVal = getClientPaymentStatus(a, incomePayments).toLowerCase();
+          bVal = getClientPaymentStatus(b, incomePayments).toLowerCase();
+          break;
+        case 'saldo':
+          aVal = getMonthlyAmount(a) - ((incomePayments.find(p => p.ingreso_id === a.id)?.monto_pagado) || 0);
+          bVal = getMonthlyAmount(b) - ((incomePayments.find(p => p.ingreso_id === b.id)?.monto_pagado) || 0);
+          break;
+      }
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      const aNum = typeof aVal === 'number' ? aVal : 0;
+      const bNum = typeof bVal === 'number' ? bVal : 0;
+      return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+    });
+  };
+
+  const getSortIndicator = (column: 'cliente' | 'monto' | 'estado' | 'saldo') => {
+    if (sortColumn !== column) return '';
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  };
 
   const filteredIncomes = useMemo(() => {
     const normalizedSearch = searchTerm.toLowerCase().trim();
@@ -133,22 +185,25 @@ export const IncomeList: React.FC<IncomeListProps> = ({
   };
 
   const pendingIncomes = useMemo(() => {
-    return filteredIncomes
+    const data = filteredIncomes
       .filter((income) => !isClientPaid(income, incomePayments) && !isClientInactive(income))
       .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-  }, [filteredIncomes, incomePayments]);
+    return applySorting(data);
+  }, [filteredIncomes, incomePayments, sortColumn, sortDirection]);
 
   const collectedIncomes = useMemo(() => {
-    return filteredIncomes
+    const data = filteredIncomes
       .filter((income) => isClientPaid(income, incomePayments) && !isClientInactive(income))
       .sort((a, b) => (b.fecha_cobro || '').localeCompare(a.fecha_cobro || ''));
-  }, [filteredIncomes, incomePayments]);
+    return applySorting(data);
+  }, [filteredIncomes, incomePayments, sortColumn, sortDirection]);
 
   const inactiveIncomes = useMemo(() => {
-    return filteredIncomes
+    const data = filteredIncomes
       .filter((income) => isClientInactive(income))
       .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-  }, [filteredIncomes]);
+    return applySorting(data);
+  }, [filteredIncomes, sortColumn, sortDirection]);
 
   const totalACobrarARS = useMemo(() => {
     return incomes
@@ -400,20 +455,29 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         <Table className="w-full table-fixed">
           <TableHeader className="bg-slate-50/50">
             <TableRow className="hover:bg-transparent border-slate-100">
-              <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 px-5 w-[28%]">
-                Cliente
+              <TableHead 
+                className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 px-5 w-[28%] cursor-pointer hover:bg-slate-100/50 transition-colors"
+                onClick={() => handleSortChange('cliente')}
+              >
+                Cliente{getSortIndicator('cliente')}
               </TableHead>
               <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[22%]">
                 Servicio / Tipo
               </TableHead>
-              <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[160px]">
-                Monto
+              <TableHead 
+                className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[160px] cursor-pointer hover:bg-slate-100/50 transition-colors"
+                onClick={() => handleSortChange('monto')}
+              >
+                Monto{getSortIndicator('monto')}
               </TableHead>
               <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[190px]">
                 Accesos
               </TableHead>
-              <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[130px]">
-                Estado
+              <TableHead 
+                className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 w-[130px] cursor-pointer hover:bg-slate-100/50 transition-colors"
+                onClick={() => handleSortChange('estado')}
+              >
+                Estado{getSortIndicator('estado')}
               </TableHead>
               <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-4 text-right pr-5 w-[150px]">
                 Gestión

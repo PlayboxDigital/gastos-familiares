@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Auto, AutoInput, AutoMovimiento, AutoMovimientoInput } from '../types';
+import { Auto, AutoInput, AutoMovimiento, AutoMovimientoInput, AutoTarea, AutoTareaInput } from '../types';
 
 export const autosService = {
   async obtenerAutos(): Promise<Auto[]> {
@@ -66,5 +66,63 @@ export const autosService = {
     }
 
     return data as AutoMovimiento;
+  },
+
+  // Tareas (Cosas a reparar)
+  async obtenerTareas(auto_id: string): Promise<AutoTarea[]> {
+    const { data, error } = await supabase
+      .from('auto_tareas')
+      .select('*')
+      .eq('auto_id', auto_id)
+      .order('prioridad', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Si la tabla no existe aún, retornar array vacío
+      console.warn(`Tabla auto_tareas no disponible: ${error.message}`);
+      return [];
+    }
+
+    return (data as AutoTarea[]) || [];
+  },
+
+  async crearTarea(tarea: AutoTareaInput): Promise<AutoTarea> {
+    const { data, error } = await supabase
+      .from('auto_tareas')
+      .insert(tarea)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Error al crear tarea del auto: ${error.message}`);
+    }
+
+    return data as AutoTarea;
+  },
+
+  async actualizarTarea(id: string, actualización: Partial<AutoTareaInput>): Promise<AutoTarea> {
+    const { data, error } = await supabase
+      .from('auto_tareas')
+      .update(actualización)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Error al actualizar tarea: ${error.message}`);
+    }
+
+    return data as AutoTarea;
+  },
+
+  async eliminarTarea(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('auto_tareas')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Error al eliminar tarea: ${error.message}`);
+    }
   },
 };

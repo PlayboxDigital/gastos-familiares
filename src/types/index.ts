@@ -179,8 +179,23 @@ export interface AutoMovimiento {
   created_at?: string;
 }
 
+export interface AutoTarea {
+  id: string;
+  auto_id: string;
+  rubro: string;
+  detalle: string;
+  costo_estimado?: number;
+  estado: 'pendiente' | 'en_progreso' | 'completada';
+  urgencia?: 'baja' | 'media' | 'alta';
+  prioridad?: number;
+  observaciones?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type AutoInput = Omit<Auto, 'id' | 'created_at'>;
 export type AutoMovimientoInput = Omit<AutoMovimiento, 'id' | 'created_at'>;
+export type AutoTareaInput = Omit<AutoTarea, 'id' | 'created_at' | 'updated_at'>;
 
 export interface IngresoPago {
   id: string;
