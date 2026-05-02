@@ -26,7 +26,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-import { cleanPhoneNumber, generateWhatsAppLink } from '../utils/phoneUtils';
 
 interface IncomeListProps {
   incomes: Income[];
@@ -91,7 +90,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
 }) => {
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [internalPaymentStatusFilter, setInternalPaymentStatusFilter] = useState<'all' | 'debtors' | 'paid'>('all');
-  const [clientFilter, setClientFilter] = useState('Todos');
+  const [serviceTypeFilter, setServiceTypeFilter] = useState('Todos');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<'cliente' | 'monto' | 'estado' | 'saldo' | null>(null);
@@ -164,11 +163,12 @@ export const IncomeList: React.FC<IncomeListProps> = ({
         cliente.toLowerCase().includes(normalizedSearch) ||
         servicio.toLowerCase().includes(normalizedSearch);
 
-      const matchesClient = clientFilter === 'Todos' || cliente === clientFilter;
+      const serviceType = getServiceLabel(income);
+      const matchesServiceType = serviceTypeFilter === 'Todos' || serviceType === serviceTypeFilter;
 
-      return matchesSearch && matchesClient;
+      return matchesSearch && matchesServiceType;
     });
-  }, [incomes, searchTerm, clientFilter]);
+  }, [incomes, searchTerm, serviceTypeFilter]);
 
   const sortByClientStatus = (a: Income, b: Income) => {
     const aInactive = isClientInactive(a);
@@ -260,8 +260,8 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
   };
 
-  const clients = useMemo(() => {
-    const list = Array.from(new Set(incomes.map((income) => income.cliente).filter(Boolean)));
+  const serviceTypes = useMemo(() => {
+    const list = Array.from(new Set(incomes.map((income) => getServiceLabel(income)).filter(Boolean)));
     return ['Todos', ...list];
   }, [incomes]);
 
@@ -298,7 +298,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     );
   };
 
-  const getServiceLabel = (income: Income) => {
+  function getServiceLabel(income: Income) {
     const servicio = (income.descripcion_servicio || income.concepto || '').toLowerCase();
     const appLink = (income.link_app || income.project_url || '').toLowerCase();
 
@@ -307,7 +307,7 @@ export const IncomeList: React.FC<IncomeListProps> = ({
     if (servicio.includes('asesor')) return 'Asesoría';
 
     return 'Servicio';
-  };
+  }
 
   const getDbLabel = (income: Income) => {
     const dbType = String(income.db_type || '').toLowerCase();
@@ -769,13 +769,13 @@ export const IncomeList: React.FC<IncomeListProps> = ({
           </select>
 
           <select
-            className="bg-slate-50 border-none text-sm px-3 py-2 rounded-xl focus:outline-none text-slate-700 min-w-[140px]"
-            value={clientFilter}
-            onChange={(event) => setClientFilter(event.target.value)}
+            className="bg-slate-50 border-none text-sm px-3 py-2 rounded-xl focus:outline-none text-slate-700 min-w-[160px]"
+            value={serviceTypeFilter}
+            onChange={(event) => setServiceTypeFilter(event.target.value)}
           >
-            <option value="Todos">Todos los clientes</option>
-            {clients.filter((client) => client !== 'Todos').map((client) => (
-              <option key={client} value={client}>{client}</option>
+            <option value="Todos">Servicio / Tipo: Todos</option>
+            {serviceTypes.filter((serviceType) => serviceType !== 'Todos').map((serviceType) => (
+              <option key={serviceType} value={serviceType}>{serviceType}</option>
             ))}
           </select>
         </div>
