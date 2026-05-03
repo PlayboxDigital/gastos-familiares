@@ -212,3 +212,24 @@ export interface IngresoPago {
 }
 
 export type IngresoPagoInput = Omit<IngresoPago, 'id' | 'created_at' | 'updated_at'>;
+
+// CLM - Contact Lead Management / Prospecting Module
+export type CLMProspectoEstado = 'pendiente' | 'contactado';
+
+export interface CLMProspecto {
+  id: string;
+  nombre_empresa: string;
+  rubro?: string;
+  telefono?: string;
+  mensaje?: string;
+  estado: CLMProspectoEstado;
+  contactado_por?: string;
+  fecha_contacto?: string;
+  observaciones?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type CLMProspectoInput = Omit<CLMProspecto, 'id' | 'created_at' | 'updated_at'>;
+
+export type CLMProspectoUpdate = Partial<CLMProspectoInput>;

@@ -37,6 +37,7 @@ import { IncomeList } from './components/IncomeList';
 import { IncomeForm } from './components/IncomeForm';
 import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
+import { CLMList } from './components/CLMList';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 import {
@@ -55,6 +56,7 @@ import {
   Activity,
   Car,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { startOfMonth, parseISO } from 'date-fns';
@@ -854,6 +856,8 @@ export default function App() {
         return <Settings categories={categories} onUpdateLimit={handleUpdateLimit} />;
       case 'autos':
         return <AutoList />;
+      case 'clm':
+        return <CLMList />;
       default:
         return (
           <Dashboard
@@ -923,6 +927,12 @@ export default function App() {
             label="Autos"
           />
           <SidebarLink
+            active={activeTab === 'clm'}
+            onClick={() => setActiveTab('clm')}
+            icon={<Users className="w-5 h-5" />}
+            label="CLM"
+          />
+          <SidebarLink
             active={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
             icon={<HistoryIcon className="w-5 h-5" />}
@@ -983,6 +993,8 @@ export default function App() {
                 ? 'Clientes y Cobranzas'
                 : activeTab === 'autos'
                 ? 'Control de Vehículos'
+                : activeTab === 'clm'
+                ? 'CLM - Prospectos'
                 : 'Configuración'}
             </h2>
           </div>
