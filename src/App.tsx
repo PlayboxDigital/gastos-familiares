@@ -1155,7 +1155,7 @@ export default function App() {
         </div>
       </main>
 
-      <nav className="md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/80 px-2 py-1.5 flex justify-between items-stretch fixed bottom-0 left-0 right-0 z-[50] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.08),0_-2px_8px_-4px_rgba(0,0,0,0.04)]">
+      <nav className="md:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200/80 px-2 py-1.5 flex overflow-x-auto whitespace-nowrap items-stretch fixed bottom-0 left-0 right-0 z-[50] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.08),0_-2px_8px_-4px_rgba(0,0,0,0.04)]">
         <MobileNavLink
           active={activeTab === 'dashboard'}
           onClick={() => setActiveTab('dashboard')}
@@ -1175,10 +1175,28 @@ export default function App() {
           label="Clientes"
         />
         <MobileNavLink
+          active={activeTab === 'autos'}
+          onClick={() => setActiveTab('autos')}
+          icon={<Car className="w-5 h-5" />}
+          label="Autos"
+        />
+        <MobileNavLink
+          active={activeTab === 'clm'}
+          onClick={() => setActiveTab('clm')}
+          icon={<Users className="w-5 h-5" />}
+          label="CLM"
+        />
+        <MobileNavLink
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
           icon={<HistoryIcon className="w-5 h-5" />}
-          label="Histor."
+          label="Historial"
+        />
+        <MobileNavLink
+          active={activeTab === 'debts'}
+          onClick={() => setActiveTab('debts')}
+          icon={<CreditCard className="w-5 h-5" />}
+          label="Deudas"
         />
         <MobileNavLink
           active={activeTab === 'settings'}
