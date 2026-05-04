@@ -1000,7 +1000,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center bg-slate-50 rounded-full px-3 py-1.5 border border-slate-100">
+            <div className={`hidden sm:flex items-center bg-slate-50 rounded-full px-3 py-1.5 border border-slate-100 ${activeTab === 'clm' ? 'hidden' : ''}`}>
               <Search className="w-4 h-4 text-slate-400 mr-2" />
               <input
                 type="text"
@@ -1012,26 +1012,28 @@ export default function App() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             </Button>
-            <Button
-              onClick={() => {
-                if (activeTab === 'debts') {
-                  setDebtToEdit(null);
-                  setIsDebtFormOpen(true);
-                } else if (activeTab === 'incomes') {
-                  setIncomeToEdit(null);
-                  setIsIncomeFormOpen(true);
-                } else {
-                  setExpenseToEdit(null);
-                  setIsFormOpen(true);
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 shadow-md shadow-blue-100"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              <span className="hidden sm:inline">
-                {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Cliente' : 'Nuevo Gasto'}
-              </span>
-            </Button>
+            {activeTab !== 'clm' && (
+              <Button
+                onClick={() => {
+                  if (activeTab === 'debts') {
+                    setDebtToEdit(null);
+                    setIsDebtFormOpen(true);
+                  } else if (activeTab === 'incomes') {
+                    setIncomeToEdit(null);
+                    setIsIncomeFormOpen(true);
+                  } else {
+                    setExpenseToEdit(null);
+                    setIsFormOpen(true);
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 shadow-md shadow-blue-100"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                <span className="hidden sm:inline">
+                  {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Cliente' : 'Nuevo Gasto'}
+                </span>
+              </Button>
+            )}
           </div>
         </header>
 

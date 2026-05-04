@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,10 +10,11 @@ import {
   Phone,
   AlertCircle,
   CheckCircle2,
+  Upload,
 } from 'lucide-react';
 import { CLMProspecto, CLMProspectoInput } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, isToday, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import {
   Dialog,
   DialogContent,
@@ -37,16 +38,17 @@ interface CLMListProps {
   // Props can be left empty for now, data fetched from service
 }
 
-const RUBROS = [
-  'Todos',
-  'Tecnología',
-  'Finanzas',
-  'Retail',
-  'Salud',
-  'Educación',
-  'Inmobiliaria',
-  'Logística',
-  'Otro',
+const RUBROS_BASE = [
+  'Distribuidora',
+  'Ferretería',
+  'Refrigeración',
+  'Herramientas de refrigeración',
+  'Mueblería',
+  'Repuestos de autos',
+  'Corralón',
+  'Electricidad',
+  'Construcción',
+  'Gimnasio',
 ];
 
 export const CLMList: React.FC<CLMListProps> = () => {
@@ -59,6 +61,8 @@ export const CLMList: React.FC<CLMListProps> = () => {
   const [prospectoToEdit, setProspectoToEdit] = useState<CLMProspecto | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load prospectos on mount
   useEffect(() => {
@@ -78,6 +82,16 @@ export const CLMList: React.FC<CLMListProps> = () => {
       setIsLoading(false);
     }
   };
+
+  const rubrosDisponibles = useMemo(() => {
+    const rubrosGuardados = prospectos
+      .map((p) => p.rubro?.trim())
+      .filter((rubro): rubro is string => Boolean(rubro));
+
+    return Array.from(new Set([...RUBROS_BASE, ...rubrosGuardados])).sort((a, b) =>
+      a.localeCompare(b, 'es')
+    );
+  }, [prospectos]);
 
   // Filter and search
   const filtered = useMemo(() => {
@@ -232,6 +246,100 @@ export const CLMList: React.FC<CLMListProps> = () => {
     }
   };
 
+  const generateAutoMessage = (empresa: string, rubro: string): string => {
+    const messages: { [key: string]: string } = {
+      'Distribuidora': `¡Hola ${empresa}! Te escribo para presentar nuestros servicios de refrigeración. ¿Cuándo podemos agendar una reunión?`,
+      'Ferretería': `¡Hola ${empresa}! Somos especialistas en refrigeración y te ofrecemos soluciones de calidad. ¿Podemos conversar?`,
+      'Refrigeración': `¡Hola ${empresa}! Contamos con servicios profesionales de refrigeración. ¿Te interesa conocer más?`,
+      'Herramientas de refrigeración': `¡Hola ${empresa}! Disponemos de herramientas especializadas para refrigeración. ¿Cuándo nos vemos?`,
+      'Mueblería': `¡Hola ${empresa}! Te ofrecemos soluciones en refrigeración para tu negocio. ¿Podemos agendar?`,
+      'Repuestos de autos': `¡Hola ${empresa}! También ofrecemos refrigeración para vehículos. ¿Nos reunimos?`,
+      'Corralón': `¡Hola ${empresa}! Contamos con servicios de refrigeración profesionales. ¿Te interesa?`,
+      'Electricidad': `¡Hola ${empresa}! Ofrecemos soluciones integrales en refrigeración. ¿Cuándo disponés?`,
+      'Construcción': `¡Hola ${empresa}! Nuestros servicios de refrigeración son ideales para tu rubro. ¿Podemos hablar?`,
+      'Gimnasio': `¡Hola ${empresa}! Ofrecemos soluciones de refrigeración para espacios comerciales. ¿Nos contactamos?`,
+    };
+    return messages[rubro] || `¡Hola ${empresa}! Te escribo para presentar nuestros servicios. ¿Cuándo podemos agendar una reunión?`;
+  };
+
+  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsImporting(true);
+      setError(null);
+
+      const text = await file.text();
+      const lines = text.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+
+      if (lines.length < 2) {
+        alert('El archivo CSV debe contener al menos un encabezado y una fila de datos');
+        return;
+      }
+
+      const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+      const nombreIdx = headers.indexOf('nombre_empresa');
+      const rubroIdx = headers.indexOf('rubro');
+      const telefonoIdx = headers.indexOf('telefono');
+
+      if (nombreIdx === -1 || rubroIdx === -1) {
+        alert('El CSV debe contener las columnas: nombre_empresa, rubro, telefono');
+        return;
+      }
+
+      const newProspectos: typeof prospectos = [];
+      let omitidas = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map((c) => c.trim());
+        const nombre = cols[nombreIdx];
+        const rubro = cols[rubroIdx];
+        const telefono = telefonoIdx !== -1 ? cols[telefonoIdx] : '';
+
+        if (!nombre || !rubro) {
+          omitidas++;
+          continue;
+        }
+
+        const mensaje = generateAutoMessage(nombre, rubro);
+
+        newProspectos.push({
+          nombre_empresa: nombre,
+          rubro,
+          telefono: telefono || undefined,
+          mensaje,
+          estado: 'pendiente',
+          observaciones: 'Importado por CSV',
+        } as any);
+      }
+
+      if (newProspectos.length === 0) {
+        alert('No hay filas válidas para importar');
+        return;
+      }
+
+      // Import to Supabase
+      const created = await clmProspectosService.createCLMProspectosBulk(newProspectos);
+
+      // Update local state
+      setProspectos((prev) => [...created, ...prev]);
+
+      alert(`✅ Importación exitosa!\n\nImportados: ${created.length}\nOmitidos: ${omitidas}`);
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error al importar CSV';
+      setError(errorMsg);
+      alert(`❌ Error al importar: ${errorMsg}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -332,17 +440,36 @@ export const CLMList: React.FC<CLMListProps> = () => {
         </div>
 
         <Select value={filterRubro} onValueChange={setFilterRubro}>
-          <SelectTrigger className="w-full md:w-40 h-10 rounded-lg">
+          <SelectTrigger className="w-full md:w-56 h-10 rounded-lg">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="rounded-lg">
-            {RUBROS.map((rubro) => (
+            <SelectItem value="Todos">Todos</SelectItem>
+            {rubrosDisponibles.map((rubro) => (
               <SelectItem key={rubro} value={rubro}>
                 {rubro}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleImportCSV}
+          className="hidden"
+          disabled={isImporting}
+        />
+
+        <Button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isImporting}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-10 w-full md:w-auto"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          {isImporting ? 'Importando...' : 'Importar CSV'}
+        </Button>
 
         <Button
           onClick={handleCreate}
@@ -408,7 +535,7 @@ export const CLMList: React.FC<CLMListProps> = () => {
                         )}
                         {prospecto.mensaje && (
                           <p className="text-xs text-slate-500 italic">
-                            "{prospecto.mensaje.substring(0, 80)}..."
+                            &quot;{prospecto.mensaje.substring(0, 80)}...&quot;
                           </p>
                         )}
                       </div>
@@ -555,6 +682,7 @@ export const CLMList: React.FC<CLMListProps> = () => {
         }}
         onSubmit={handleFormSubmit}
         prospectoToEdit={prospectoToEdit}
+        rubrosDisponibles={rubrosDisponibles}
       />
 
       {/* Delete Confirmation Dialog */}

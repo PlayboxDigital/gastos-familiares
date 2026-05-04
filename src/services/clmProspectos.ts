@@ -69,4 +69,21 @@ export const clmProspectosService = {
       fecha_contacto: fechaContacto,
     });
   },
+
+  async createCLMProspectosBulk(prospectos: CLMProspectoInput[]): Promise<CLMProspecto[]> {
+    if (prospectos.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('clm_prospectos')
+      .insert(prospectos)
+      .select();
+
+    if (error) {
+      throw new Error(`Error al importar prospectos: ${error.message}`);
+    }
+
+    return (data as CLMProspecto[]) || [];
+  },
 };

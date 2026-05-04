@@ -76,7 +76,7 @@ const TOYOTA_CORONA_PENDIENTES: ToyotaCoronaPendiente[] = [
 
 const isToyotaCorona = (auto: Auto) => {
   const text = `${auto.nombre || ''} ${auto.marca || ''} ${auto.modelo || ''}`.toLowerCase();
-  return text.includes('toyota') || text.includes('corona');
+  return text.includes('toyota') && text.includes('corona');
 };
 
 export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {

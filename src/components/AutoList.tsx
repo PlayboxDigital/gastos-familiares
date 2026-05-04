@@ -10,6 +10,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+type ToyotaCoronaGasto = {
+  concepto: string;
+  monto: number;
+  pagadoPor: string;
+};
+
+const TOYOTA_CORONA_GASTOS: ToyotaCoronaGasto[] = [
+  { concepto: 'Tachito agua completo', monto: 13760, pagadoPor: 'Papá' },
+  { concepto: 'Cubiertas', monto: 145000, pagadoPor: 'Brisa' },
+  { concepto: 'Radiador mano de obra', monto: 60000, pagadoPor: 'Brisa' },
+  { concepto: 'Radiador reparación', monto: 60000, pagadoPor: 'Brisa' },
+  { concepto: 'Plásticos repuestos', monto: 80000, pagadoPor: 'Brisa' },
+  { concepto: 'Kit distribución + correa', monto: 120333, pagadoPor: 'Mitad y mitad' },
+  { concepto: 'Mano de obra mecánico', monto: 350000, pagadoPor: 'Brisa' },
+  { concepto: 'Correa hidráulica', monto: 41040, pagadoPor: 'Papá' },
+  { concepto: 'Tren delantero', monto: 345500, pagadoPor: 'Papá' },
+  { concepto: 'Frenos', monto: 170000, pagadoPor: 'Papá' },
+  { concepto: 'Mano de obra gomero', monto: 150000, pagadoPor: 'Papá' },
+  { concepto: 'Electricista', monto: 80000, pagadoPor: 'Papá' },
+  { concepto: 'Alternador reparación', monto: 60000, pagadoPor: 'Papá' },
+  { concepto: 'Tapa radiador', monto: 36147, pagadoPor: 'Brisa' },
+  { concepto: 'Aceite caja cambio', monto: 59178, pagadoPor: 'Brisa' },
+  { concepto: 'Batería', monto: 140000, pagadoPor: 'Brisa' },
+];
+
+const isToyotaCorona = (auto: Auto) => {
+  const text = `${auto.nombre || ''} ${auto.marca || ''} ${auto.modelo || ''}`.toLowerCase();
+  return text.includes('toyota') && text.includes('corona');
+};
+
 export const AutoList: React.FC = () => {
   const [autos, setAutos] = useState<Auto[]>([]);
   const [movimientos, setMovimientos] = useState<AutoMovimiento[]>([]);
@@ -48,11 +78,22 @@ export const AutoList: React.FC = () => {
 
   const totalPorAuto = useMemo(() => {
     const map: Record<string, number> = {};
+    
+    // Suma movimientos de base de datos
     movimientos.forEach(m => {
       map[m.auto_id] = (map[m.auto_id] || 0) + m.monto;
     });
+    
+    // Agrega gastos legacy de Toyota Corona si corresponde
+    autos.forEach(auto => {
+      if (isToyotaCorona(auto)) {
+        const totalLegacy = TOYOTA_CORONA_GASTOS.reduce((sum, g) => sum + g.monto, 0);
+        map[auto.id] = (map[auto.id] || 0) + totalLegacy;
+      }
+    });
+    
     return map;
-  }, [movimientos]);
+  }, [movimientos, autos]);
 
   const handleCreateAuto = async (e: React.FormEvent) => {
     e.preventDefault();

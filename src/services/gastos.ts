@@ -121,9 +121,12 @@ export const gastosService = {
   },
 
   async crearGasto(gasto: ExpenseInput): Promise<Expense> {
+    // Excluir tipo_gasto del payload enviado a Supabase ya que la columna no existe
+    const { tipo_gasto, ...payload } = gasto;
+
     const { data, error } = await supabase
       .from('gastos')
-      .insert(gasto)
+      .insert(payload)
       .select()
       .single();
 
@@ -138,9 +141,12 @@ export const gastosService = {
     console.log("SAVE_GASTO_ID:", id);
     console.log("SAVE_PAYLOAD:", gasto);
 
+    // Excluir tipo_gasto del payload enviado a Supabase ya que la columna no existe
+    const { tipo_gasto, ...payload } = gasto;
+
     const { data: responseData, error } = await supabase
       .from('gastos')
-      .update(gasto)
+      .update(payload)
       .eq('id', id)
       .select();
 
