@@ -13,7 +13,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { CLMProspecto, CLMProspectoInput } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
 import {
   Dialog,

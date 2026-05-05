@@ -8,7 +8,7 @@ import { gastosPagosHistorialService } from '../services/gastosPagosHistorial';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { History as HistoryIcon, Receipt, Calendar, CreditCard, Landmark, ExternalLink } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Helpers locales para blindaje de fechas
 const safeParseDate = (dateStr: string | null | undefined): Date | null => {

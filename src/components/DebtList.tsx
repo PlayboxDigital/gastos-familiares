@@ -11,7 +11,7 @@ import {
 import { Debt, DebtStatus } from '../types';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import {
   Dialog,

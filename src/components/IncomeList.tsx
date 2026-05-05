@@ -9,7 +9,7 @@ import {
   Github, Database, Globe, Code, Phone,
 } from 'lucide-react';
 import { Income, Expense, IngresoPago } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import {
   Tooltip,

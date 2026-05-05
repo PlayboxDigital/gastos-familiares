@@ -7,7 +7,7 @@ import {
   ExternalLink, Edit2, Calendar, DollarSign, Info, Shield, Server, Users,
   Plus, CheckCircle2, AlertTriangle, AlertCircle, Loader2, Trash2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';

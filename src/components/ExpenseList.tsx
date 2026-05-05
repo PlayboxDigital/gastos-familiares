@@ -16,7 +16,7 @@ import { Expense, Priority, PaymentStatus } from '../types';
 import { CATEGORIES, RESPONSIBLES, PRIORITIES } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento, getColorVencimiento } from '../estadoVencimiento';
 
 interface ExpenseListProps {
