@@ -12,14 +12,31 @@ import { Expense, Priority, PaymentStatus } from '../types';
 import { CATEGORIES, RESPONSIBLES, PRIORITIES } from '../constants';
 import { format } from 'date-fns';
 
+const CATEGORY_OPTIONS = [
+  'Almacén',
+  'Verdulería',
+  'Carnicería',
+  'Kiosco',
+  'Comida rápida',
+  'Supermercado',
+  'Transporte',
+  'Nafta',
+  'Farmacia',
+  'Limpieza',
+  'Otros',
+] as const;
+
+type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
+
 interface ExpenseFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (expense: Omit<Expense, 'id'> & { id?: string }) => void;
+  onSubmit: (expense: Omit<Expense, 'id'> & { id?: string; tipo_gasto?: 'fijo' | 'variable'; pagado?: boolean }) => void;
   expenseToEdit?: Expense | null;
+  defaultTipoGasto?: 'fijo' | 'variable';
 }
 
-export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, expenseToEdit }) => {
+export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, expenseToEdit, defaultTipoGasto = 'fijo' }) => {
   const [formData, setFormData] = useState<Omit<Expense, 'id'>>({
     fecha: format(new Date(), 'yyyy-MM-dd'),
     monto: 0,
@@ -56,7 +73,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
       setFormData({
         fecha: format(new Date(), 'yyyy-MM-dd'),
         monto: 0,
-        categoria: CATEGORIES[0].categoria,
+        categoria: CATEGORY_OPTIONS[0],
         subcategoria: '',
         responsable: RESPONSIBLES[0],
         prioridad: 'Importante',
@@ -64,11 +81,11 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         estado_pago: 'Pendiente',
         fecha_pago: null,
         dia_vencimiento: new Date().getDate(),
-        tipo_gasto: 'fijo',
-        tipo: 'Fijo',
+        tipo_gasto: defaultTipoGasto,
+        tipo: defaultTipoGasto === 'variable' ? 'Variable' : 'Fijo',
       });
     }
-  }, [expenseToEdit, isOpen]);
+  }, [expenseToEdit, isOpen, defaultTipoGasto]);
 
   const handleChange = React.useCallback((field: keyof Omit<Expense, 'id'>, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -80,7 +97,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     const normalizedData = {
       ...formData,
       fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null),
-      dia_vencimiento: formData.tipo_gasto === 'variable' ? undefined : formData.dia_vencimiento
+      dia_vencimiento: formData.tipo_gasto === 'variable' ? undefined : formData.dia_vencimiento,
+      pagado: formData.estado_pago === 'Pagado',
     };
     
     onSubmit({ ...normalizedData, id: expenseToEdit?.id });
@@ -152,8 +170,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {CATEGORIES.map(c => (
-                      <SelectItem key={c.categoria} value={c.categoria} className="rounded-lg">{c.categoria}</SelectItem>
+                    {CATEGORY_OPTIONS.map((categoria) => (
+                      <SelectItem key={categoria} value={categoria} className="rounded-lg">{categoria}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -211,8 +229,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    <SelectItem value="fijo" className="rounded-lg">Fijo</SelectItem>
-                    <SelectItem value="variable" className="rounded-lg">Variable</SelectItem>
+                    <SelectItem value="fijo" className="rounded-lg">Mensual / fijo</SelectItem>
+                    <SelectItem value="variable" className="rounded-lg">Variable / solo este mes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

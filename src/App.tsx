@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ExpenseList } from './components/ExpenseList';
@@ -38,6 +38,7 @@ import { IncomeForm } from './components/IncomeForm';
 import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
+import { GastosExtraList } from './components/GastosExtraList';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 import {
@@ -57,10 +58,8 @@ import {
   Car,
   Trash2,
   Users,
+  DollarSign
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { startOfMonth, parseISO } from 'date-fns';
-
 import {
   Dialog,
   DialogContent,
@@ -104,6 +103,9 @@ export default function App() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomePayments, setIncomePayments] = useState<IngresoPago[]>([]);
+  const [gastosExtra, setGastosExtra] = useState<any[]>([]);
+  const [gastosExtraReload, setGastosExtraReload] = useState(0);
+  const [expenseFormDefaultTipo, setExpenseFormDefaultTipo] = useState<'fijo' | 'variable'>('fijo');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDebtFormOpen, setIsDebtFormOpen] = useState(false);
@@ -264,7 +266,8 @@ export default function App() {
         historial,
         deudas,
         ingresos,
-        ingresosPagos
+        ingresosPagos,
+        gastosExtraData
       ] = await Promise.all([
         gastosService.obtenerGastos(),
         presupuestosService.obtenerPresupuestos(),
@@ -272,6 +275,7 @@ export default function App() {
         deudasService.obtenerDeudas(),
         incomesService.obtenerIngresos(),
         incomesService.obtenerTodosLosPagos(),
+        gastosService.obtenerGastosExtra(),
       ]);
 
       setExpenses(gastos);
@@ -280,6 +284,7 @@ export default function App() {
       setDebts(deudas);
       setIncomes(ingresos);
       setIncomePayments(ingresosPagos);
+      setGastosExtra(gastosExtraData);
     } catch (e: any) {
       console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       setError(`Error al cargar datos: ${e.message}`);
@@ -382,8 +387,8 @@ export default function App() {
     fetchData();
   }, [fetchData]);
 
-  const handleAddExpense = async (newExpense: Omit<Expense, 'id'> & { id?: string }) => {
-    console.log("APP_HANDLEADDEXPENSE_INIT:", newExpense.id || 'NEW');
+  const handleAddExpense = async (newExpense: Omit<Expense, 'id'> & { id?: string; tipo_gasto?: 'fijo' | 'variable'; pagado?: boolean }) => {
+    console.log("APP_HANDLEADDEXPENSE_INIT:", newExpense.id || 'NEW', newExpense.tipo_gasto);
     try {
       if (newExpense.id) {
         const id = newExpense.id;
@@ -399,6 +404,8 @@ export default function App() {
         // Limpieza de campos inexistentes en DB para evitar errores de schema (Prompt 079)
         const cleanData = { ...data };
         if ('fecha_vencimiento' in cleanData) delete (cleanData as any).fecha_vencimiento;
+        if ('pagado' in cleanData) delete (cleanData as any).pagado;
+        if ('tipo_gasto' in cleanData) delete (cleanData as any).tipo_gasto;
 
         // Actualizamos en Supabase y obtenemos el registro real actualizado
         console.log("ITEM_EDITADO_DIA_VENCIMIENTO:", data.dia_vencimiento);
@@ -410,8 +417,20 @@ export default function App() {
           console.log("APP_HANDLEADDEXPENSE_STATE_UPDATE_SUCCESS:", id);
           return updated;
         });
+      } else if (newExpense.tipo_gasto === 'variable') {
+        const createdExtra = await gastosService.crearGastoExtra({
+          fecha: newExpense.fecha,
+          descripcion: newExpense.concepto || newExpense.subcategoria || '',
+          monto: newExpense.monto,
+          categoria: newExpense.categoria,
+          pagado: newExpense.estado_pago === 'Pagado',
+        });
+
+        setGastosExtra((prev) => [createdExtra, ...prev]);
+        setGastosExtraReload((prev) => prev + 1);
       } else {
-        const createdExpense = await gastosService.crearGasto(newExpense);
+        const { tipo_gasto, pagado, ...gastoPayload } = newExpense;
+        const createdExpense = await gastosService.crearGasto(gastoPayload);
         setExpenses((prev) => [createdExpense, ...prev]);
       }
     } catch (error) {
@@ -802,6 +821,7 @@ export default function App() {
               setIncomePaymentFilter('debtors');
               setActiveTab('incomes');
             }}
+            gastosExtra={gastosExtra}
           />
         );
       case 'monthly-status':
@@ -858,6 +878,8 @@ export default function App() {
         return <AutoList />;
       case 'clm':
         return <CLMList />;
+      case 'gastos_extra':
+        return <GastosExtraList reloadKey={gastosExtraReload} />;
       default:
         return (
           <Dashboard
@@ -933,6 +955,12 @@ export default function App() {
             label="CLM"
           />
           <SidebarLink
+            active={activeTab === 'gastos_extra'}
+            onClick={() => setActiveTab('gastos_extra')}
+            icon={<DollarSign className="w-5 h-5" />}
+            label="Gastos"
+          />
+          <SidebarLink
             active={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
             icon={<HistoryIcon className="w-5 h-5" />}
@@ -995,6 +1023,8 @@ export default function App() {
                 ? 'Control de Vehículos'
                 : activeTab === 'clm'
                 ? 'CLM - Prospectos'
+                : activeTab === 'gastos_extra'
+                ? 'Gastos del Mes'
                 : 'Configuración'}
             </h2>
           </div>
@@ -1012,7 +1042,7 @@ export default function App() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             </Button>
-            {activeTab !== 'clm' && (
+            {activeTab !== 'clm' && activeTab !== 'gastos_extra' && activeTab !== 'autos' && (
               <Button
                 onClick={() => {
                   if (activeTab === 'debts') {
@@ -1023,6 +1053,7 @@ export default function App() {
                     setIsIncomeFormOpen(true);
                   } else {
                     setExpenseToEdit(null);
+                    setExpenseFormDefaultTipo('fijo');
                     setIsFormOpen(true);
                   }
                 }}
@@ -1032,6 +1063,19 @@ export default function App() {
                 <span className="hidden sm:inline">
                   {activeTab === 'debts' ? 'Nueva Deuda' : activeTab === 'incomes' ? 'Nuevo Cliente' : 'Nuevo Gasto'}
                 </span>
+              </Button>
+            )}
+            {activeTab === 'gastos_extra' && (
+              <Button
+                onClick={() => {
+                  setExpenseToEdit(null);
+                  setExpenseFormDefaultTipo('variable');
+                  setIsFormOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 shadow-md shadow-blue-100"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                <span className="hidden sm:inline">Nuevo Gasto Variable</span>
               </Button>
             )}
           </div>
@@ -1187,6 +1231,12 @@ export default function App() {
           label="CLM"
         />
         <MobileNavLink
+          active={activeTab === 'gastos_extra'}
+          onClick={() => setActiveTab('gastos_extra')}
+          icon={<DollarSign className="w-5 h-5" />}
+          label="Gastos"
+        />
+        <MobileNavLink
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
           icon={<HistoryIcon className="w-5 h-5" />}
@@ -1214,6 +1264,7 @@ export default function App() {
         }}
         onSubmit={handleAddExpense}
         expenseToEdit={expenseToEdit}
+        defaultTipoGasto={expenseFormDefaultTipo}
       />
 
       <PaymentModal
