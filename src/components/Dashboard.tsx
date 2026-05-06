@@ -77,16 +77,10 @@ const getEstadoPagoReal = (
 
   const montoExigible = getMontoExigible(expense);
 
+  // Usar historial mensual como fuente de verdad
   if (montoExigible <= 0) return 'Pagado';
   if (paidThisPeriod >= montoExigible) return 'Pagado';
   if (paidThisPeriod > 0) return 'Parcial';
-
-  if (expense.estado_pago === 'Pagado') return 'Pagado';
-  if (expense.estado_pago === 'Parcial') return 'Parcial';
-  
-  const totalAbonadoGral = expense.total_abonado ?? 0;
-  if (totalAbonadoGral >= montoExigible) return 'Pagado';
-  if (totalAbonadoGral > 0) return 'Parcial';
 
   return 'Pendiente';
 };

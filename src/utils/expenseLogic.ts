@@ -5,14 +5,14 @@ import { startOfMonth, addMonths, isValid, parseISO } from 'date-fns';
  * Determina si un gasto es de tipo variable.
  */
 export const isVariableExpense = (expense: Expense) => {
-  return expense.tipo_gasto === 'variable';
+  return expense.tipo === 'Variable';
 };
 
 /**
  * Determina si un gasto es de tipo fijo (recurrente).
  */
 export const isFixedExpense = (expense: Expense) => {
-  return expense.tipo_gasto !== 'variable';
+  return expense.tipo === 'Fijo';
 };
 
 /**

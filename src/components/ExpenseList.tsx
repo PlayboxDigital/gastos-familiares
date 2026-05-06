@@ -12,7 +12,7 @@ import {
   Search, Filter, Edit2,
   CheckCircle2, Clock, Activity, History as HistoryIcon
 } from 'lucide-react';
-import { Expense, Priority, PaymentStatus } from '../types';
+import { Expense, Priority, PaymentStatus, GastoPagoHistorial } from '../types';
 import { CATEGORIES, RESPONSIBLES, PRIORITIES } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -26,6 +26,8 @@ interface ExpenseListProps {
   onShowHistory: (expense: Expense) => void;
   onActionPayment: (expense: Expense) => void;
   updatingPaymentIds: Set<string>;
+  currentMonth?: Date;
+  history?: GastoPagoHistorial[];
 }
 
 type ExpenseWithCredit = Expense & {
@@ -41,15 +43,31 @@ const getMontoExigible = (expense: ExpenseWithCredit): number => {
   return Math.max(0, expense.monto - (expense.saldo_a_favor_aplicado ?? 0));
 };
 
-const getEstadoPagoReal = (expense: ExpenseWithCredit): PaymentStatus => {
+const getEstadoPagoReal = (expense: ExpenseWithCredit, history?: GastoPagoHistorial[], currentMonth?: Date): PaymentStatus => {
   const montoExigible = getMontoExigible(expense);
-  const totalAbonado = expense.total_abonado ?? 0;
 
-  if (montoExigible <= 0) return 'Pagado';
-  if (totalAbonado >= montoExigible) return 'Pagado';
-  if (totalAbonado > 0) return 'Parcial';
+  if (history && currentMonth) {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
 
-  return 'Pendiente';
+    const paidThisPeriod = history
+      .filter(h => h.gasto_id === expense.id && h.periodo_anio === year && h.periodo_mes === month)
+      .reduce((sum, h) => sum + h.monto_pagado, 0);
+
+    if (montoExigible <= 0) return 'Pagado';
+    if (paidThisPeriod >= montoExigible) return 'Pagado';
+    if (paidThisPeriod > 0) return 'Parcial';
+
+    return 'Pendiente';
+  } else {
+    const totalAbonado = expense.total_abonado ?? 0;
+
+    if (montoExigible <= 0) return 'Pagado';
+    if (totalAbonado >= montoExigible) return 'Pagado';
+    if (totalAbonado > 0) return 'Parcial';
+
+    return 'Pendiente';
+  }
 };
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
@@ -84,7 +102,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
       const result = expenses.filter((e) => {
         const subcategoria = e.subcategoria || '';
         const concepto = e.concepto || '';
-        const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit);
+        const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
 
         const matchesSearch =
           subcategoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -308,7 +326,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               {filteredExpenses.map((e) => {
                 const estadoVencimiento = getEstadoVencimiento(e);
                 const colorVencimiento = getColorVencimiento(estadoVencimiento);
-                const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit);
+                const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
                 const montoExigible = getMontoExigible(e as ExpenseWithCredit);
                 const saldoPendiente = Math.max(0, montoExigible - (e.total_abonado ?? 0));
 

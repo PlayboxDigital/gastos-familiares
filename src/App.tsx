@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { motion, AnimatePresence } from 'framer-motion';
+import { startOfMonth, parseISO, isSameMonth } from 'date-fns';
 import React, { useState, useEffect, useRef } from 'react';
 import { Dashboard } from './components/Dashboard';
-import { ExpenseList } from './components/ExpenseList';
 import { ExpenseForm } from './components/ExpenseForm';
 import { PaymentModal } from './components/PaymentModal';
 import { PaymentHistoryModal } from './components/PaymentHistoryModal';
@@ -38,8 +38,7 @@ import { IncomeForm } from './components/IncomeForm';
 import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
-import { GastosExtraList } from './components/GastosExtraList';
-import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { ExpenseList } from './components/ExpenseList';import { generateExpenseOccurrences, isVariableExpense } from './utils/expenseLogic';
 
 import {
   Plus,
@@ -103,8 +102,6 @@ export default function App() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomePayments, setIncomePayments] = useState<IngresoPago[]>([]);
-  const [gastosExtra, setGastosExtra] = useState<any[]>([]);
-  const [gastosExtraReload, setGastosExtraReload] = useState(0);
   const [expenseFormDefaultTipo, setExpenseFormDefaultTipo] = useState<'fijo' | 'variable'>('fijo');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -118,6 +115,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [incomeSearchTerm, setIncomeSearchTerm] = useState('');
   const [incomePaymentFilter, setIncomePaymentFilter] = useState<'all' | 'debtors' | 'paid'>('all');
+
+  const currentMonth = new Date();
 
   // Sincronizar búsqueda cuando se cambia de pestaña manual
   useEffect(() => {
@@ -266,8 +265,7 @@ export default function App() {
         historial,
         deudas,
         ingresos,
-        ingresosPagos,
-        gastosExtraData
+        ingresosPagos
       ] = await Promise.all([
         gastosService.obtenerGastos(),
         presupuestosService.obtenerPresupuestos(),
@@ -275,7 +273,6 @@ export default function App() {
         deudasService.obtenerDeudas(),
         incomesService.obtenerIngresos(),
         incomesService.obtenerTodosLosPagos(),
-        gastosService.obtenerGastosExtra(),
       ]);
 
       setExpenses(gastos);
@@ -284,7 +281,6 @@ export default function App() {
       setDebts(deudas);
       setIncomes(ingresos);
       setIncomePayments(ingresosPagos);
-      setGastosExtra(gastosExtraData);
     } catch (e: any) {
       console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       setError(`Error al cargar datos: ${e.message}`);
@@ -417,17 +413,6 @@ export default function App() {
           console.log("APP_HANDLEADDEXPENSE_STATE_UPDATE_SUCCESS:", id);
           return updated;
         });
-      } else if (newExpense.tipo_gasto === 'variable') {
-        const createdExtra = await gastosService.crearGastoExtra({
-          fecha: newExpense.fecha,
-          descripcion: newExpense.concepto || newExpense.subcategoria || '',
-          monto: newExpense.monto,
-          categoria: newExpense.categoria,
-          pagado: newExpense.estado_pago === 'Pagado',
-        });
-
-        setGastosExtra((prev) => [createdExtra, ...prev]);
-        setGastosExtraReload((prev) => prev + 1);
       } else {
         const { tipo_gasto, pagado, ...gastoPayload } = newExpense;
         const createdExpense = await gastosService.crearGasto(gastoPayload);
@@ -569,30 +554,9 @@ export default function App() {
     setUpdatingPaymentIds((prev) => new Set(prev).add(expenseId));
 
     try {
-      const currentTotalAbonado = originalExpense.total_abonado || 0;
-      const newTotalAbonado = currentTotalAbonado + pago.monto_pagado;
-
-      const expenseActualizada: ExpenseWithCredit = {
-        ...(originalExpense as ExpenseWithCredit),
-        total_abonado: newTotalAbonado,
-        fecha_pago: pago.fecha_pago,
-      };
-
-      const newStatus = getEstadoPagoReal(expenseActualizada, newTotalAbonado);
-
-      const updateData = {
-        estado_pago: newStatus,
-        total_abonado: newTotalAbonado,
-        fecha_pago: pago.fecha_pago,
-      };
-
-      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLECONFIRMPAYMENT_1:", updateData);
-      setExpenses((prev) =>
-        prev.map((e) => (e.id === expenseId ? ({ ...e, ...updateData } as Expense) : e))
-      );
-
+      console.log("APP_GASTOS_PAGO_MENSUAL:", expenseId, pago.periodo_mes, pago.periodo_anio);
+      
       await gastosPagosHistorialService.crearPagoHistorial(pago);
-      await gastosService.actualizarGasto(expenseId, updateData as any);
 
       const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
       setGlobalHistory(updatedHistory);
@@ -600,8 +564,6 @@ export default function App() {
       setIsPaymentModalOpen(false);
     } catch (error) {
       console.error('Error al confirmar pago:', error);
-      console.log("APP_GASTOS_SETSTATE_SECUNDARIO_HANDLECONFIRMPAYMENT_ROLLBACK:", originalExpense);
-      setExpenses((prev) => prev.map((e) => (e.id === expenseId ? originalExpense : e)));
       throw error;
     } finally {
       setUpdatingPaymentIds((prev) => {
@@ -821,18 +783,19 @@ export default function App() {
               setIncomePaymentFilter('debtors');
               setActiveTab('incomes');
             }}
-            gastosExtra={gastosExtra}
           />
         );
       case 'monthly-status':
         return (
           <ExpenseList
-            expenses={expenses}
+            expenses={expenses.filter(e => e.tipo === 'Fijo')}
             onEdit={handleEditExpense}
             onTogglePayment={handleTogglePayment}
             onShowHistory={handleShowHistory}
             onActionPayment={handleActionPayment}
             updatingPaymentIds={updatingPaymentIds}
+            currentMonth={currentMonth}
+            history={globalHistory}
           />
         );
       case 'history':
@@ -878,8 +841,19 @@ export default function App() {
         return <AutoList />;
       case 'clm':
         return <CLMList />;
-      case 'gastos_extra':
-        return <GastosExtraList reloadKey={gastosExtraReload} />;
+      case 'monthly-expenses':
+        return (
+          <ExpenseList
+            expenses={expenses.filter(e => e.tipo === 'Variable' && isSameMonth(parseISO(e.fecha), currentMonth))}
+            onEdit={handleEditExpense}
+            onTogglePayment={handleTogglePayment}
+            onShowHistory={handleShowHistory}
+            onActionPayment={handleActionPayment}
+            updatingPaymentIds={updatingPaymentIds}
+            currentMonth={currentMonth}
+            history={globalHistory}
+          />
+        );
       default:
         return (
           <Dashboard
@@ -955,10 +929,10 @@ export default function App() {
             label="CLM"
           />
           <SidebarLink
-            active={activeTab === 'gastos_extra'}
-            onClick={() => setActiveTab('gastos_extra')}
+            active={activeTab === 'monthly-expenses'}
+            onClick={() => setActiveTab('monthly-expenses')}
             icon={<DollarSign className="w-5 h-5" />}
-            label="Gastos"
+            label="Gastos del Mes"
           />
           <SidebarLink
             active={activeTab === 'history'}
@@ -1023,7 +997,7 @@ export default function App() {
                 ? 'Control de Vehículos'
                 : activeTab === 'clm'
                 ? 'CLM - Prospectos'
-                : activeTab === 'gastos_extra'
+                : activeTab === 'monthly-expenses'
                 ? 'Gastos del Mes'
                 : 'Configuración'}
             </h2>
@@ -1042,7 +1016,7 @@ export default function App() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             </Button>
-            {activeTab !== 'clm' && activeTab !== 'gastos_extra' && activeTab !== 'autos' && (
+            {activeTab !== 'clm' && activeTab !== 'monthly-expenses' && activeTab !== 'autos' && (
               <Button
                 onClick={() => {
                   if (activeTab === 'debts') {
@@ -1065,7 +1039,7 @@ export default function App() {
                 </span>
               </Button>
             )}
-            {activeTab === 'gastos_extra' && (
+            {activeTab === 'monthly-expenses' && (
               <Button
                 onClick={() => {
                   setExpenseToEdit(null);
@@ -1231,10 +1205,10 @@ export default function App() {
           label="CLM"
         />
         <MobileNavLink
-          active={activeTab === 'gastos_extra'}
-          onClick={() => setActiveTab('gastos_extra')}
+          active={activeTab === 'monthly-expenses'}
+          onClick={() => setActiveTab('monthly-expenses')}
           icon={<DollarSign className="w-5 h-5" />}
-          label="Gastos"
+          label="Gastos del Mes"
         />
         <MobileNavLink
           active={activeTab === 'history'}
@@ -1288,14 +1262,6 @@ export default function App() {
         }}
         onSubmit={handleAddDebt}
         debtToEdit={debtToEdit}
-      />
-
-      {/* PWA Install Banner */}
-      <PWAInstallBanner
-        open={showPwaBanner}
-        onClose={handlePwaClose}
-        onInstall={handlePwaInstall}
-        isIOS={isIOS}
       />
 
       <IncomeForm

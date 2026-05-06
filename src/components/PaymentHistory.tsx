@@ -58,7 +58,7 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({
   onDeleteExpense
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [groupBy, setGroupBy] = useState<'none' | 'month' | 'category'>('month');
+  const [groupBy, setGroupBy] = useState<'month'>('month');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['all']));
 
   const toggleGroup = (groupId: string) => {
@@ -89,26 +89,19 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({
   }, [history, searchTerm]);
 
   const groupedHistory = useMemo(() => {
-    if (groupBy === 'none') return { 'Todos los registros': filteredHistory };
-
     const groups: Record<string, GastoPagoHistorial[]> = {};
 
     filteredHistory.forEach(item => {
-      let key = '';
-      if (groupBy === 'month') {
-        // Formato: "Octubre 2024"
-        const date = new Date(item.periodo_anio, item.periodo_mes - 1);
-        key = format(date, 'MMMM yyyy', { locale: es });
-      } else if (groupBy === 'category') {
-        key = item.categoria_snapshot || 'Sin categoría';
-      }
+      // Formato: "Octubre 2024"
+      const date = new Date(item.periodo_anio, item.periodo_mes - 1);
+      const key = format(date, 'MMMM yyyy', { locale: es });
 
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
     return groups;
-  }, [filteredHistory, groupBy]);
+  }, [filteredHistory]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -139,28 +132,12 @@ export const PaymentHistory: React.FC<PaymentHistoryProps> = ({
 
         <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl">
           <Button
-            variant={groupBy === 'month' ? 'secondary' : 'ghost'}
+            variant="secondary"
             size="sm"
-            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'month' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
-            onClick={() => setGroupBy('month')}
+            className="rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider shadow-sm text-indigo-600 bg-white"
+            disabled
           >
             Por Mes
-          </Button>
-          <Button
-            variant={groupBy === 'category' ? 'secondary' : 'ghost'}
-            size="sm"
-            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'category' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
-            onClick={() => setGroupBy('category')}
-          >
-            Por Categoría
-          </Button>
-          <Button
-            variant={groupBy === 'none' ? 'secondary' : 'ghost'}
-            size="sm"
-            className={`rounded-xl px-4 h-8 text-[10px] font-black uppercase tracking-wider transition-all ${groupBy === 'none' ? 'shadow-sm text-indigo-600 bg-white' : 'text-slate-500'}`}
-            onClick={() => setGroupBy('none')}
-          >
-            Lista Plana
           </Button>
         </div>
       </div>

@@ -137,34 +137,6 @@ export const gastosService = {
     return data as Expense;
   },
 
-  // Nuevo servicio para gastos_extra
-  async obtenerGastosExtra(): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('gastos_extra')
-      .select('*')
-      .order('fecha', { ascending: false });
-
-    if (error) {
-      throw new Error(`Error al obtener gastos extra: ${error.message}`);
-    }
-
-    return (data as any[]) || [];
-  },
-
-  async crearGastoExtra(gastoExtra: { fecha: string; descripcion: string; monto: number; categoria: string; pagado: boolean }): Promise<any> {
-    const { data, error } = await supabase
-      .from('gastos_extra')
-      .insert(gastoExtra)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al crear gasto extra: ${error.message}`);
-    }
-
-    return data;
-  },
-
   async actualizarGasto(id: string, gasto: Partial<ExpenseInput>): Promise<Expense> {
     console.log("SAVE_GASTO_ID:", id);
     console.log("SAVE_PAYLOAD:", gasto);
