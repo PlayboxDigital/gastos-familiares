@@ -120,8 +120,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({ isOpen
     if (!expense) return;
     setLoading(true);
     try {
-      const key = expense.servicio_clave || expense.concepto || '';
-      const data = await gastosPagosHistorialService.obtenerHistorialPorServicio(key);
+     const data = await gastosPagosHistorialService.obtenerHistorialPorGasto(expense.id);
       setHistory(data);
     } catch (error) {
       console.error(error);

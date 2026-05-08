@@ -762,42 +762,207 @@ export default function App() {
     console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
     
     switch (activeTab) {
-        case 'dashboard':
-        return (
-          <Dashboard
-            expenses={expenses}
-            categories={categories}
-            incomes={incomes}
-            incomePayments={incomePayments}
-            debts={debts}
-            history={globalHistory}
-            onQuickPayExpense={handleActionPayment}
-            onTabChange={setActiveTab}
-            onSelectIncome={(name) => {
-              setIncomeSearchTerm(name);
-              setIncomePaymentFilter('all');
-              setActiveTab('incomes');
-            }}
-            onSelectDebtors={() => {
-              setIncomeSearchTerm('');
-              setIncomePaymentFilter('debtors');
-              setActiveTab('incomes');
-            }}
-          />
-        );
-      case 'monthly-status':
-        return (
-          <ExpenseList
-            expenses={expenses.filter(e => e.tipo === 'Fijo')}
-            onEdit={handleEditExpense}
-            onTogglePayment={handleTogglePayment}
-            onShowHistory={handleShowHistory}
-            onActionPayment={handleActionPayment}
-            updatingPaymentIds={updatingPaymentIds}
-            currentMonth={currentMonth}
-            history={globalHistory}
-          />
-        );
+       case 'dashboard':
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          onClick={() => {
+            setExpenseToEdit(null);
+            setExpenseFormDefaultTipo('variable');
+            setIsFormOpen(true);
+          }}
+          className="rounded-xl"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Nuevo gasto
+        </Button>
+      </div>
+
+      <Dashboard
+        expenses={expenses}
+        categories={categories}
+        incomes={incomes}
+        incomePayments={incomePayments}
+        debts={debts}
+        history={globalHistory}
+        onQuickPayExpense={handleActionPayment}
+        onTabChange={setActiveTab}
+        onSelectIncome={(name) => {
+          setIncomeSearchTerm(name);
+          setIncomePaymentFilter('all');
+          setActiveTab('incomes');
+        }}
+        onSelectDebtors={() => {
+          setIncomeSearchTerm('');
+          setIncomePaymentFilter('debtors');
+          setActiveTab('incomes');
+        }}
+      />
+    </div>
+  );
+     case 'monthly-status': {
+  const fixedExpenses = expenses.filter(e => e.tipo === 'Fijo' && e.archived !== true);
+
+  const variableExpenses = expenses.filter(e => {
+    if (e.tipo !== 'Variable' || e.archived === true) return false;
+
+    const rawDate = e.fecha || e.created_at;
+    if (!rawDate) return false;
+
+    const expenseDate = parseISO(String(rawDate).slice(0, 10));
+    return isSameMonth(expenseDate, currentMonth);
+  });
+
+  const totalFijos = fixedExpenses.reduce((sum, e) => sum + Number(e.monto || 0), 0);
+  const totalVariables = variableExpenses.reduce((sum, e) => sum + Number(e.monto || 0), 0);
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Total fijos</p>
+          <p className="text-2xl font-bold">${totalFijos.toLocaleString('es-AR')}</p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Total variables</p>
+          <p className="text-2xl font-bold">${totalVariables.toLocaleString('es-AR')}</p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Total mensual</p>
+          <p className="text-2xl font-bold">${(totalFijos + totalVariables).toLocaleString('es-AR')}</p>
+        </div>
+      </div>
+
+    <section>
+  <h2 className="text-xl font-bold mb-4">Gastos fijos del mes</h2>
+
+  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 border-b border-slate-200">
+          <tr>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Gasto</th>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Categoría</th>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Responsable</th>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Estado</th>
+            <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Monto</th>
+            <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Acciones</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {fixedExpenses.map((expense) => {
+            const monthNumber = currentMonth.getMonth() + 1;
+            const yearNumber = currentMonth.getFullYear();
+
+            const paidThisMonth = globalHistory.some((h) =>
+              h.gasto_id === expense.id &&
+              Number(h.periodo_mes) === monthNumber &&
+              Number(h.periodo_anio) === yearNumber
+            );
+
+            const today = new Date();
+            const dueDay = Number(expense.dia_vencimiento || 0);
+            const isCurrentVisibleMonth =
+              today.getMonth() === currentMonth.getMonth() &&
+              today.getFullYear() === currentMonth.getFullYear();
+
+            const isExpired =
+              !paidThisMonth &&
+              dueDay > 0 &&
+              isCurrentVisibleMonth &&
+              today.getDate() > dueDay;
+
+            const estadoMes = paidThisMonth
+              ? 'Pagado'
+              : isExpired
+                ? 'Vencido'
+                : 'Pendiente';
+
+            const estadoClass =
+              estadoMes === 'Pagado'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : estadoMes === 'Vencido'
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200';
+
+            return (
+              <tr key={expense.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                <td className="px-4 py-4">
+                  <div className="font-bold text-slate-900">
+                    {expense.subcategoria || expense.concepto || expense.categoria || 'Sin concepto'}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    {expense.tipo || 'Fijo'}
+                  </div>
+                </td>
+
+                <td className="px-4 py-4 text-slate-700">{expense.categoria || '-'}</td>
+
+                <td className="px-4 py-4 text-slate-700">{expense.responsable || '-'}</td>
+
+                <td className="px-4 py-4">
+                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${estadoClass}`}>
+                    {estadoMes}
+                  </span>
+                </td>
+
+                <td className="px-4 py-4 text-right font-black text-slate-900">
+                  ${Number(expense.monto || 0).toLocaleString('es-AR')}
+                </td>
+
+<td className="px-4 py-4 text-right">
+  <div className="flex justify-end gap-2">
+    <button
+      onClick={() => handleActionPayment(expense)}
+      className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+    >
+      Pagar
+    </button>
+
+    <button
+      onClick={() => handleShowHistory(expense)}
+      className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-100"
+    >
+      Historial
+    </button>
+
+    <button
+      onClick={() => handleEditExpense(expense)}
+      className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 border border-blue-200 hover:bg-blue-100"
+    >
+      Editar
+    </button>
+  </div>
+</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+      <section>
+        <h2 className="text-xl font-bold mb-4">Gastos variables del mes</h2>
+        <ExpenseList
+          expenses={variableExpenses}
+          onEdit={handleEditExpense}
+          onTogglePayment={handleTogglePayment}
+          onShowHistory={handleShowHistory}
+          onActionPayment={handleActionPayment}
+          updatingPaymentIds={updatingPaymentIds}
+          currentMonth={currentMonth}
+          history={globalHistory}
+        />
+      </section>
+    </div>
+  );
+}
       case 'history':
         return (
           <PaymentHistory 
@@ -928,12 +1093,7 @@ export default function App() {
             icon={<Users className="w-5 h-5" />}
             label="CLM"
           />
-          <SidebarLink
-            active={activeTab === 'monthly-expenses'}
-            onClick={() => setActiveTab('monthly-expenses')}
-            icon={<DollarSign className="w-5 h-5" />}
-            label="Gastos del Mes"
-          />
+
           <SidebarLink
             active={activeTab === 'history'}
             onClick={() => setActiveTab('history')}
@@ -1204,12 +1364,7 @@ export default function App() {
           icon={<Users className="w-5 h-5" />}
           label="CLM"
         />
-        <MobileNavLink
-          active={activeTab === 'monthly-expenses'}
-          onClick={() => setActiveTab('monthly-expenses')}
-          icon={<DollarSign className="w-5 h-5" />}
-          label="Gastos del Mes"
-        />
+
         <MobileNavLink
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
