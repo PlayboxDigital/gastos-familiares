@@ -237,7 +237,7 @@ export const CLMList: React.FC<CLMListProps> = () => {
       );
 
       // Open WhatsApp
-      const mensaje = prospecto.mensaje || '¡Hola! Te escribo para presentar nuestros servicios...';
+const mensaje = prospecto.mensaje || 'Holaa 😊 ¿Cómo estás?';
       const telefonoLimpio = prospecto.telefono.replace(/\D/g, '');
       const urlWhatsApp = `https://wa.me/${telefonoLimpio}?text=${encodeURIComponent(mensaje)}`;
       window.open(urlWhatsApp, '_blank');
@@ -246,21 +246,9 @@ export const CLMList: React.FC<CLMListProps> = () => {
     }
   };
 
-  const generateAutoMessage = (empresa: string, rubro: string): string => {
-    const messages: { [key: string]: string } = {
-      'Distribuidora': `¡Hola ${empresa}! Te escribo para presentar nuestros servicios de refrigeración. ¿Cuándo podemos agendar una reunión?`,
-      'Ferretería': `¡Hola ${empresa}! Somos especialistas en refrigeración y te ofrecemos soluciones de calidad. ¿Podemos conversar?`,
-      'Refrigeración': `¡Hola ${empresa}! Contamos con servicios profesionales de refrigeración. ¿Te interesa conocer más?`,
-      'Herramientas de refrigeración': `¡Hola ${empresa}! Disponemos de herramientas especializadas para refrigeración. ¿Cuándo nos vemos?`,
-      'Mueblería': `¡Hola ${empresa}! Te ofrecemos soluciones en refrigeración para tu negocio. ¿Podemos agendar?`,
-      'Repuestos de autos': `¡Hola ${empresa}! También ofrecemos refrigeración para vehículos. ¿Nos reunimos?`,
-      'Corralón': `¡Hola ${empresa}! Contamos con servicios de refrigeración profesionales. ¿Te interesa?`,
-      'Electricidad': `¡Hola ${empresa}! Ofrecemos soluciones integrales en refrigeración. ¿Cuándo disponés?`,
-      'Construcción': `¡Hola ${empresa}! Nuestros servicios de refrigeración son ideales para tu rubro. ¿Podemos hablar?`,
-      'Gimnasio': `¡Hola ${empresa}! Ofrecemos soluciones de refrigeración para espacios comerciales. ¿Nos contactamos?`,
-    };
-    return messages[rubro] || `¡Hola ${empresa}! Te escribo para presentar nuestros servicios. ¿Cuándo podemos agendar una reunión?`;
-  };
+ const generateAutoMessage = (): string => {
+  return 'Holaa 😊 ¿Cómo estás?';
+};
 
   const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
