@@ -29,20 +29,14 @@ interface ExpenseListProps {
   currentMonth?: Date;
   history?: GastoPagoHistorial[];
 }
-
 type ExpenseWithCredit = Expense & {
   saldo_a_favor_aplicado?: number;
   monto_final_a_pagar?: number;
 };
 
 const getMontoExigible = (expense: ExpenseWithCredit): number => {
-  if (typeof expense.monto_final_a_pagar === 'number') {
-    return Math.max(0, expense.monto_final_a_pagar);
-  }
-
-  return Math.max(0, expense.monto - (expense.saldo_a_favor_aplicado ?? 0));
+  return Number(expense.monto || 0);
 };
-
 const getEstadoPagoReal = (expense: ExpenseWithCredit, history?: GastoPagoHistorial[], currentMonth?: Date): PaymentStatus => {
   const montoExigible = getMontoExigible(expense);
 
@@ -76,7 +70,9 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   onTogglePayment,
   onShowHistory,
   onActionPayment,
-  updatingPaymentIds
+  updatingPaymentIds,
+  currentMonth,
+  history = []
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -102,8 +98,14 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
       const result = expenses.filter((e) => {
         const subcategoria = e.subcategoria || '';
         const concepto = e.concepto || '';
-        const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
-
+const estadoPagoReal =
+  currentMonth
+    ? getEstadoPagoReal(
+        e as ExpenseWithCredit,
+        history || [],
+        currentMonth
+      )
+    : (e.estado_pago || 'Pendiente');
         const matchesSearch =
           subcategoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
           concepto.toLowerCase().includes(searchTerm.toLowerCase());
@@ -133,8 +135,17 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
       console.error("APP_ERROR_DERIVADO_EXPENSES_filteredExpenses:", e, expenses);
       return [];
     }
-  }, [expenses, searchTerm, categoryFilter, responsibleFilter, priorityFilter, statusFilter, sortConfig]);
-
+}, [
+  expenses,
+  searchTerm,
+  categoryFilter,
+  responsibleFilter,
+  priorityFilter,
+  statusFilter,
+  sortConfig,
+  currentMonth,
+  history
+]);
   const totalFiltered = useMemo(
     () => filteredExpenses.reduce((sum, e) => sum + e.monto, 0),
     [filteredExpenses]
