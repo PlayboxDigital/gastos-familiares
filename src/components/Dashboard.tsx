@@ -445,15 +445,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [monthlyExpenses, history, currentMonth]);
 
-  const totalPendingEssentialAmount = useMemo(() => {
-    return pendingEssentialExpenses.reduce((sum, e) => {
-      const saldo = Math.max(
-        0,
-        getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
-      );
-      return sum + saldo;
-    }, 0);
-  }, [pendingEssentialExpenses]);
+const totalPendingEssentialAmount = useMemo(() => {
+  return pendingEssentialExpenses.reduce((sum, e) => {
+    return sum + Number(e.monto || 0);
+  }, 0);
+}, [pendingEssentialExpenses]);
 
   const clientesPorCobrar = useMemo(() => {
     return incomes
@@ -507,10 +503,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const riesgoFinanciero = useMemo(() => {
     return essentialOverdueExpenses.reduce((sum, e) => {
-      const saldo = Math.max(
-        0,
-        getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
-      );
+      const saldo = Number(e.monto || 0);
       return sum + saldo;
     }, 0);
   }, [essentialOverdueExpenses]);
