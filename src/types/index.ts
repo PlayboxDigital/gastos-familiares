@@ -1,6 +1,42 @@
 export type Priority = 'Esencial' | 'Importante' | 'Prescindible';
 export type PaymentStatus = 'Pagado' | 'Pendiente' | 'Parcial';
 
+export interface Producto {
+  id: string;
+  nombre: string;
+  categoria: string;
+  unidad: string;
+  lugar_compra?: string;
+  created_at?: string;
+}
+
+export type ProductoInput = Omit<Producto, 'id' | 'created_at'>;
+
+export interface ConsumoBase {
+  id: string;
+  producto_id: string;
+  cantidad_base: number;
+  duracion_meses: number;
+  prioridad: Priority;
+  created_at?: string;
+}
+
+export type ConsumoBaseInput = Omit<ConsumoBase, 'id' | 'producto_id' | 'created_at'>;
+
+export interface ConsumoBaseItem {
+  producto_id: string;
+  consumo_base_id: string;
+  producto: string;
+  categoria: string;
+  unidad: string;
+  lugarCompra: string;
+  cantidadBase: number;
+  duracionMeses: number;
+  prioridad: Priority;
+}
+
+export type ConsumoBaseFormValues = Omit<ConsumoBaseItem, 'producto_id' | 'consumo_base_id'>;
+
 export interface Expense {
   id: string;
   fecha: string;

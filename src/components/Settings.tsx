@@ -32,10 +32,44 @@ export const Settings: React.FC<SettingsProps> = ({ categories = [], onUpdateLim
     setTempLimits(limits);
   }, [categories]);
 
+  const parseCurrencyInput = (value: string | number): number => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+    const raw = String(value).trim();
+    if (!raw) return 0;
+
+    // keep digits, comma, dot and minus
+    const cleaned = raw.replace(/[^\d.,-]/g, '');
+
+    const hasComma = cleaned.indexOf(',') !== -1;
+    const hasDot = cleaned.indexOf('.') !== -1;
+
+    let normalized = cleaned;
+
+    if (hasComma && hasDot) {
+      // e.g. 1.234.567,89 -> 1234567.89
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (hasComma && !hasDot) {
+      // e.g. 1234567,89 -> 1234567.89
+      normalized = cleaned.replace(',', '.');
+    } else if (!hasComma && hasDot) {
+      // ambiguous: if multiple dots or last group length === 3 treat as thousands separators
+      const parts = cleaned.split('.');
+      const lastPart = parts[parts.length - 1];
+      if (parts.length > 2 || lastPart.length === 3) {
+        normalized = cleaned.replace(/\./g, '');
+      }
+      // otherwise keep dot as decimal
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const handleSave = () => {
     Object.entries(tempLimits).forEach(([categoryName, value]) => {
-      const numericValue = value === '' ? 0 : parseFloat(value as string);
-      if (!isNaN(numericValue)) {
+      const numericValue = value === '' ? 0 : parseCurrencyInput(value as string);
+      if (Number.isFinite(numericValue)) {
         onUpdateLimit(categoryName, numericValue);
       }
     });
@@ -81,7 +115,7 @@ export const Settings: React.FC<SettingsProps> = ({ categories = [], onUpdateLim
                     className="w-32 sm:w-24 h-10 sm:h-9 bg-white text-right font-black text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900"
                     value={tempLimits[cat.categoria] ?? ''}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9.]/g, '');
+                      const val = e.target.value.replace(/[^0-9.,-]/g, '');
                       setTempLimits(prev => ({ ...prev, [cat.categoria]: val }));
                     }}
                     placeholder="0"

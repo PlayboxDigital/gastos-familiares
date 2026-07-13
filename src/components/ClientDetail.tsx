@@ -281,7 +281,7 @@ export const ClientDetail: React.FC<ClientDetailProps> = ({ income, isOpen, onCl
       if (editingPago) {
         await incomesService.actualizarPagoIngreso(editingPago.id, pagoData);
       } else {
-        await incomesService.registrarPago(pagoData);
+        await incomesService.registrarOActualizarPagoIngresoPorPeriodo(pagoData);
       }
 
       await cargarPagos();

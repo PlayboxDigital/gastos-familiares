@@ -38,7 +38,9 @@ import { IncomeForm } from './components/IncomeForm';
 import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
-import { ExpenseList } from './components/ExpenseList';import { generateExpenseOccurrences, isVariableExpense } from './utils/expenseLogic';
+import { ExpenseList } from './components/ExpenseList';
+import { ConsumoInteligente } from './components/ConsumoInteligente';
+import { generateExpenseOccurrences, isVariableExpense } from './utils/expenseLogic';
 
 import {
   Plus,
@@ -555,11 +557,30 @@ export default function App() {
 
     try {
       console.log("APP_GASTOS_PAGO_MENSUAL:", expenseId, pago.periodo_mes, pago.periodo_anio);
-      
-      await gastosPagosHistorialService.crearPagoHistorial(pago);
 
+      // Registrar o actualizar el registro de pago para evitar duplicados por período
+      const savedPago = await gastosPagosHistorialService.registrarOActualizarPagoPorPeriodo(pago);
+
+      // Refrescar historial global
       const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
       setGlobalHistory(updatedHistory);
+
+      // Sincronizar el gasto relacionado: total_abonado = suma de todos los pagos en historial para ese gasto
+      const pagosDelGasto = updatedHistory.filter(h => h.gasto_id === expenseId);
+      const sumaPagos = pagosDelGasto.reduce((s, h) => s + Number(h.monto_pagado || 0), 0);
+
+      // Determinar fecha_pago más reciente
+      const fechas = pagosDelGasto.map(h => h.fecha_pago).filter(Boolean) as string[];
+      const fechaMasReciente = fechas.length > 0 ? fechas.sort().reverse()[0] : undefined;
+
+      const updateData: any = {
+        total_abonado: sumaPagos,
+        estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, sumaPagos)
+      };
+      if (fechaMasReciente) updateData.fecha_pago = fechaMasReciente;
+
+      const updatedExpense = await gastosService.actualizarGasto(expenseId, updateData as any);
+      setExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, ...updatedExpense } : e));
 
       setIsPaymentModalOpen(false);
     } catch (error) {
@@ -985,6 +1006,8 @@ export default function App() {
             onDelete={handleDeleteDebt}
           />
         );
+      case 'consumo-inteligente':
+        return <ConsumoInteligente />;
       case 'incomes':
         return (
           <IncomeList 
@@ -1105,6 +1128,12 @@ export default function App() {
             onClick={() => setActiveTab('debts')}
             icon={<CreditCard className="w-5 h-5" />}
             label="Deudas"
+          />
+          <SidebarLink
+            active={activeTab === 'consumo-inteligente'}
+            onClick={() => setActiveTab('consumo-inteligente')}
+            icon={<Zap className="w-5 h-5" />}
+            label="Consumo Inteligente"
           />
           <SidebarLink
             active={activeTab === 'settings'}
@@ -1376,6 +1405,12 @@ export default function App() {
           onClick={() => setActiveTab('debts')}
           icon={<CreditCard className="w-5 h-5" />}
           label="Deudas"
+        />
+        <MobileNavLink
+          active={activeTab === 'consumo-inteligente'}
+          onClick={() => setActiveTab('consumo-inteligente')}
+          icon={<Zap className="w-5 h-5" />}
+          label="Consumo"
         />
         <MobileNavLink
           active={activeTab === 'settings'}

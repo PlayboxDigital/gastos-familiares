@@ -23,11 +23,11 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt, IngresoPago } from '../types';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays, isValid } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMonth, differenceInDays, isBefore, isSameDay, addDays, isValid, addMonths, lastDayOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { generateExpenseOccurrences, isVariableExpense } from '../utils/expenseLogic';
+import { generateExpenseOccurrences, isVariableExpense, isFixedExpense } from '../utils/expenseLogic';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -107,6 +107,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
       currentPeriod: format(d, 'yyyy-MM')
     };
   }, []);
+
+  const getPaidAmountForPeriod = React.useCallback((
+    expense: Expense,
+    targetMonth: Date,
+    historyEntries: GastoPagoHistorial[] = []
+  ): number => {
+    if (!expense || expense.archived) return 0;
+
+    const year = targetMonth.getFullYear();
+    const month = targetMonth.getMonth() + 1;
+    const occurrences = generateExpenseOccurrences(expense, targetMonth);
+
+    if (!occurrences.some((occ) => isSameMonth(occ, targetMonth))) {
+      return 0;
+    }
+
+    const paidFromHistory = historyEntries
+      .filter((h) => h.gasto_id === expense.id && h.periodo_anio === year && h.periodo_mes === month)
+      .reduce((sum, h) => sum + Number(h.monto_pagado || 0), 0);
+
+    const montoBase = getMontoExigible(expense as ExpenseWithCredit);
+    const totalAbonado = Number(expense.total_abonado || 0);
+    const estadoPago = String(expense.estado_pago || '').toLowerCase();
+
+    const paidFromExpense = estadoPago === 'pagado' ? Math.min(totalAbonado, montoBase) : 0;
+
+    return Math.max(0, Math.max(paidFromHistory, paidFromExpense));
+  }, []);
+
+  const getPendingAmountForPeriod = React.useCallback((
+    expense: Expense,
+    targetMonth: Date,
+    historyEntries: GastoPagoHistorial[] = []
+  ): number => {
+    const montoBase = getMontoExigible(expense as ExpenseWithCredit);
+    const pagado = getPaidAmountForPeriod(expense, targetMonth, historyEntries);
+    return Math.max(0, montoBase - pagado);
+  }, [getPaidAmountForPeriod]);
 
   const clientesStatus = useMemo(() => {
     const todayNum = new Date().getDate();
@@ -189,6 +227,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [expenses, currentMonth]);
 
   const getStatus = (e: Expense) => getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
+
+  const promedioMensualData = useMemo(() => {
+    const monthsWithData: number[] = [];
+    const earliestMonth = expenses.reduce<Date | null>((acc, expense) => {
+      if (!expense.fecha || expense.archived) return acc;
+      try {
+        const parsed = parseISO(expense.fecha);
+        if (!isValid(parsed)) return acc;
+        const monthStart = startOfMonth(parsed);
+        return acc && acc < monthStart ? acc : monthStart;
+      } catch {
+        return acc;
+      }
+    }, null);
+
+    const startCursor = earliestMonth ? startOfMonth(earliestMonth) : startOfMonth(currentMonth);
+    const endCursor = startOfMonth(currentMonth);
+    let cursor = new Date(startCursor);
+
+    while (cursor < endCursor) {
+      const monthlyPaid = expenses.reduce((sum, expense) => {
+        if (!expense.fecha || expense.archived) return sum;
+        const occurrences = generateExpenseOccurrences(expense, cursor);
+        if (!occurrences.some((occ) => isSameMonth(occ, cursor))) return sum;
+        return sum + getPaidAmountForPeriod(expense, cursor, history);
+      }, 0);
+
+      if (monthlyPaid > 0) {
+        monthsWithData.push(monthlyPaid);
+      }
+
+      cursor = addMonths(cursor, 1);
+    }
+
+    const average = monthsWithData.length > 0
+      ? monthsWithData.reduce((sum, value) => sum + value, 0) / monthsWithData.length
+      : 0;
+
+    return {
+      average,
+      monthsCount: monthsWithData.length,
+    };
+  }, [expenses, history, currentMonth, getPaidAmountForPeriod]);
+
+  const promedioMensual = promedioMensualData.average;
+  const gastadoMesActual = useMemo(
+    () =>
+      monthlyExpenses.reduce((sum, expense) => {
+        return sum + getPaidAmountForPeriod(expense, currentMonth, history);
+      }, 0),
+    [monthlyExpenses, currentMonth, history, getPaidAmountForPeriod]
+  );
+  const totalPendienteReal = useMemo(
+    () =>
+      monthlyExpenses.reduce((sum, expense) => {
+        return sum + getPendingAmountForPeriod(expense, currentMonth, history);
+      }, 0),
+    [monthlyExpenses, currentMonth, history, getPendingAmountForPeriod]
+  );
+  const restantePromedio = Math.max(promedioMensual - gastadoMesActual, 0);
+  const faltaPagar = Math.max(restantePromedio, totalPendienteReal);
+  const promedioDescription = promedioMensualData.monthsCount > 0
+    ? `Calculado sobre ${promedioMensualData.monthsCount} ${promedioMensualData.monthsCount === 1 ? 'mes' : 'meses'}`
+    : 'Sin meses completos con datos';
+  const faltaPagarDescription = totalPendienteReal <= restantePromedio
+    ? 'Dentro del promedio mensual'
+    : 'Este mes se proyecta por encima del promedio';
 
   const totalMonthly = useMemo(
     () => monthlyExpenses.reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0),
@@ -321,22 +426,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
+  const getExpenseDeadlineForPeriod = (expense: Expense, referenceDate: Date): Date => {
+    const deadline = expense.dia_vencimiento
+      ? new Date(referenceDate.getFullYear(), referenceDate.getMonth(), expense.dia_vencimiento)
+      : parseISO(expense.fecha);
+
+    if (expense.dia_vencimiento) {
+      const d = new Date(deadline);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    if (!isValid(deadline)) {
+      const fallback = new Date(referenceDate);
+      fallback.setHours(0, 0, 0, 0);
+      return fallback;
+    }
+
+    if (isFixedExpense(expense)) {
+      const originalDay = deadline.getDate();
+      const lastDay = lastDayOfMonth(referenceDate).getDate();
+      return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), Math.min(originalDay, lastDay));
+    }
+
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  };
+
   const proximosVencimientos = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     return pagosPendientes
       .map(e => {
-        let deadlineDate: Date;
-        
-        if (e.dia_vencimiento) {
-          // Si tiene día de vencimiento, asumimos este mes
-          deadlineDate = new Date(today.getFullYear(), today.getMonth(), e.dia_vencimiento);
-        } else {
-          // Si no, usamos la fecha original
-          deadlineDate = parseISO(e.fecha);
-        }
-        deadlineDate.setHours(0, 0, 0, 0);
+        const deadlineDate = getExpenseDeadlineForPeriod(e, today);
 
         const diff = differenceInDays(deadlineDate, today);
         
@@ -383,14 +506,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const saldo = Math.max(0, getMontoExigible(e as ExpenseWithCredit) - paid);
       const tienePagoParcial = paid > 0 && saldo > 0;
 
-      // Calcular fecha de vencimiento
-      let deadlineDate: Date;
-      if (e.dia_vencimiento) {
-        deadlineDate = new Date(today.getFullYear(), today.getMonth(), e.dia_vencimiento);
-      } else {
-        deadlineDate = parseISO(e.fecha);
-      }
-      deadlineDate.setHours(0, 0, 0, 0);
+      const deadlineDate = getExpenseDeadlineForPeriod(e, today);
 
       const diff = differenceInDays(deadlineDate, today);
       const isVencido = isBefore(deadlineDate, today);
@@ -434,6 +550,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
     .slice(0, 8);
   }, [pagosPendientes, history, currentMonth]);
 
+  const getPagadoPeriodoActual = (expense: Expense): number => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+
+    const paidFromHistory = history
+      .filter((h) =>
+        h.gasto_id === expense.id &&
+        h.periodo_anio === year &&
+        h.periodo_mes === month
+      )
+      .reduce((sum, h) => sum + Number(h.monto_pagado || 0), 0);
+
+    const montoBase = getMontoExigible(expense as ExpenseWithCredit);
+    const totalAbonado = Number(expense.total_abonado || 0);
+    const estadoPago = String(expense.estado_pago || '').toLowerCase();
+
+    const paidFromExpense =
+      estadoPago === 'pagado' && totalAbonado >= montoBase
+        ? totalAbonado
+        : 0;
+
+    return Math.max(paidFromHistory, paidFromExpense);
+  };
+
+  const getSaldoPendientePeriodoActual = (expense: Expense): number => {
+    // Use centralized exigible amount (handles saldo a favor / monto_final_a_pagar)
+    const montoBase = getMontoExigible(expense as ExpenseWithCredit);
+    const pagado = getPagadoPeriodoActual(expense);
+
+    return Math.max(0, montoBase - pagado);
+  };
+
   const pendingEssentialExpenses = useMemo(() => {
     return monthlyExpenses.filter((e) => {
       const esEsencial =
@@ -441,15 +589,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         (e as any).esencial === true ||
         (e as any).tipo === 'esencial';
 
-      return esEsencial && getStatus(e) !== 'Pagado';
+      return esEsencial && getSaldoPendientePeriodoActual(e) > 0;
     });
   }, [monthlyExpenses, history, currentMonth]);
 
-const totalPendingEssentialAmount = useMemo(() => {
-  return pendingEssentialExpenses.reduce((sum, e) => {
-    return sum + Number(e.monto || 0);
-  }, 0);
-}, [pendingEssentialExpenses]);
+  const totalPendingEssentialAmount = useMemo(() => {
+    return pendingEssentialExpenses.reduce((sum, e) => {
+      return sum + getSaldoPendientePeriodoActual(e);
+    }, 0);
+  }, [pendingEssentialExpenses, history, currentMonth]);
 
   const clientesPorCobrar = useMemo(() => {
     return incomes
@@ -527,28 +675,27 @@ const totalPendingEssentialAmount = useMemo(() => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:gap-4 lg:grid-cols-3">
         <KPICard
-          title="Cobro Mensual Clientes"
-          value={`$${totalCobroMensualClientes.toLocaleString()}`}
-          icon={<Users className="h-5 w-5 text-indigo-500" />}
-          description={`${clientesStatus.conDeuda.count} con deuda • $${clientesStatus.conDeuda.totalAdeudado.toLocaleString()} pendiente`}
-          color="indigo"
-          onClick={() => setIsCobroModalOpen(true)}
+          title="Promedio mensual"
+          value={`$${promedioMensualData.monthsCount > 0 ? Math.ceil(promedioMensual).toLocaleString('es-AR') : '0'}`}
+          icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
+          description={promedioDescription}
+          color="emerald"
         />
         <KPICard
-          title="Gastos del Mes"
-          value={`$${totalMonthly.toLocaleString()}`}
+          title="Gastado este mes"
+          value={`$${gastadoMesActual.toLocaleString()}`}
           icon={<TrendingDown className="h-5 w-5 text-rose-500" />}
-          description="Total gastos mensuales"
+          description={currentMonthName}
           color="rose"
         />
         <KPICard
-          title="Libre Estimado"
-          value={`$${libreEstimado.toLocaleString()}`}
-          icon={<Wallet className="h-5 w-5 text-emerald-500" />}
-          description="Balance proyectado"
-          color={libreEstimado >= 0 ? "emerald" : "rose"}
+          title="Falta pagar"
+          value={`$${faltaPagar.toLocaleString()}`}
+          icon={<Wallet className="h-5 w-5 text-amber-500" />}
+          description={faltaPagarDescription}
+          color={totalPendienteReal > restantePromedio ? 'amber' : 'slate'}
         />
       </div>
 
@@ -600,10 +747,7 @@ const totalPendingEssentialAmount = useMemo(() => {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       {pendingEssentialExpenses.map((e) => {
                         const estado = getEstadoVencimiento(e);
-                        const saldo = Math.max(
-                          0,
-                          getMontoExigible(e as ExpenseWithCredit) - (e.total_abonado ?? 0)
-                        );
+                        const saldo = getSaldoPendientePeriodoActual(e);
 
                         return (
                           <button

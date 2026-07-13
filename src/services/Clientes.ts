@@ -134,6 +134,49 @@ export const incomesService = {
     return data as IngresoPago;
   },
 
+  async registrarOActualizarPagoIngresoPorPeriodo(pago: IngresoPagoInput): Promise<IngresoPago> {
+    console.log("CLIENTES_SERVICE_REGISTRAR_O_ACTUALIZAR_PAGO_INIT:", pago);
+
+    const query = supabase.from('ingresos_pagos').select('*');
+    if (pago.ingreso_id) {
+      query.eq('ingreso_id', pago.ingreso_id);
+    } else if (pago.cliente) {
+      query.eq('cliente', pago.cliente);
+    }
+    query.eq('periodo', pago.periodo);
+
+    const { data: existingPago, error: selectError } = await query.maybeSingle();
+
+    if (selectError) {
+      console.error("CLIENTES_SERVICE_REGISTRAR_O_ACTUALIZAR_PAGO_SELECT_ERROR:", selectError);
+      throw new Error(`Error al verificar pago existente: ${selectError.message}`);
+    }
+
+    if (existingPago) {
+      console.log("CLIENTES_SERVICE_REGISTRAR_O_ACTUALIZAR_PAGO_EXISTING:", existingPago.id);
+      const { data, error } = await supabase
+        .from('ingresos_pagos')
+        .update(pago)
+        .eq('id', existingPago.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("CLIENTES_SERVICE_ACTUALIZAR_PAGO_ERROR:", error);
+        throw new Error(`Error al actualizar pago existente: ${error.message}`);
+      }
+
+      if (!data) {
+        throw new Error('Error al actualizar pago existente: no se devolvió el objeto actualizado.');
+      }
+
+      return data as IngresoPago;
+    }
+
+    console.log("CLIENTES_SERVICE_REGISTRAR_O_ACTUALIZAR_PAGO_INSERT_NEW");
+    return this.registrarPago(pago);
+  },
+
   async actualizarPagoIngreso(id: string, pago: Partial<IngresoPagoInput>): Promise<IngresoPago> {
     const { data, error } = await supabase
       .from('ingresos_pagos')

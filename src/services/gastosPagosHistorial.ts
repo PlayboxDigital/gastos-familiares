@@ -59,6 +59,39 @@ export const gastosPagosHistorialService = {
     return data[0] as GastoPagoHistorial;
   },
 
+  async registrarOActualizarPagoPorPeriodo(pago: GastoPagoHistorialInput): Promise<GastoPagoHistorial> {
+    // Buscar por gasto_id + periodo para evitar duplicados por período
+    const query = supabase.from('gastos_pagos_historial').select('*').eq('gasto_id', pago.gasto_id).eq('periodo_anio', pago.periodo_anio).eq('periodo_mes', pago.periodo_mes);
+
+    const { data: existing, error: selectError } = await query.maybeSingle();
+    if (selectError) {
+      console.error('ERROR verificando pago existente en historial:', selectError);
+      throw new Error(`Error al verificar pago existente: ${selectError.message}`);
+    }
+
+    if (existing) {
+      // Acumular el monto_pagado para soportar pagos parciales sucesivos
+      const acumulado = Number(existing.monto_pagado || 0) + Number(pago.monto_pagado || 0);
+      const payload = { ...pago, monto_pagado: acumulado };
+
+      const { data, error } = await supabase
+        .from('gastos_pagos_historial')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('ERROR actualizando pago existente en historial:', error);
+        throw new Error(`Error al actualizar pago existente: ${error.message}`);
+      }
+
+      return data as GastoPagoHistorial;
+    }
+
+    return this.crearPagoHistorial(pago);
+  },
+
   async eliminarPagoHistorial(pagoId: string): Promise<void> {
     const { error } = await supabase
       .from('gastos_pagos_historial')
