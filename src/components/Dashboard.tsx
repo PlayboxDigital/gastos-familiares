@@ -205,25 +205,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const monthEnd = endOfMonth(currentMonth);
 
   const monthlyExpenses = useMemo(() => {
-    console.log("DASHBOARD_CALC_1_START: monthlyExpenses", expenses.length);
-    try {
-      const result = expenses.filter((e) => {
-        if (!e.fecha || e.archived) return false;
-        try {
-          // Usamos la lógica centralizada de ocurrencias para determinar si el gasto aplica a este mes
-          const occurrences = generateExpenseOccurrences(e, currentMonth);
-          return occurrences.some(occ => isSameMonth(occ, currentMonth));
-        } catch (err) {
-          console.error('Error parsing date:', e.fecha, err);
-          return false;
-        }
-      });
-      console.log("DASHBOARD_CALC_1_END: monthlyExpenses", result.length);
-      return result;
-    } catch (e) {
-      console.error("APP_ERROR_DERIVADO_EXPENSES_monthlyExpenses:", e, expenses);
-      return [];
-    }
+    return expenses.filter((e) => {
+      if (!e.fecha || e.archived) return false;
+
+      try {
+        const occurrences = generateExpenseOccurrences(e, currentMonth);
+        return occurrences.some(occ => isSameMonth(occ, currentMonth));
+      } catch (err) {
+        console.error('Error parsing date:', e.fecha, err);
+        return false;
+      }
+    });
   }, [expenses, currentMonth]);
 
   const getStatus = (e: Expense) => getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
@@ -331,6 +323,76 @@ export const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
+  const fixedMonthlyExpenses = useMemo(
+    () =>
+      monthlyExpenses
+        .filter((e) => isFixedExpense(e))
+        .reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0),
+    [monthlyExpenses]
+  );
+
+  const expenseCategoryTotals = useMemo(() => {
+    const normalize = (value: string | undefined) => (value || '').toLowerCase();
+    const contains = (value: string | undefined, keyword: string) => normalize(value).includes(keyword);
+
+    const supermarketTotal = monthlyExpenses
+      .filter((e) => contains(e.categoria, 'supermercado') || contains(e.subcategoria, 'supermercado'))
+      .reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0);
+
+    const foodTotal = monthlyExpenses
+      .filter((e) => contains(e.categoria, 'comida') || contains(e.subcategoria, 'comida'))
+      .reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0);
+
+    const cleaningTotal = monthlyExpenses
+      .filter((e) => contains(e.categoria, 'limpieza') || contains(e.subcategoria, 'limpieza'))
+      .reduce((sum, e) => sum + getMontoExigible(e as ExpenseWithCredit), 0);
+
+    return {
+      supermarketTotal,
+      foodTotal,
+      cleaningTotal,
+      hasSpecificTotals: supermarketTotal > 0 || foodTotal > 0 || cleaningTotal > 0,
+    };
+  }, [monthlyExpenses]);
+
+  const historicMonthlyPayments = useMemo(() => {
+    const historyData: Array<{ key: string; label: string; total: number }> = [];
+    const earliestMonth = expenses.reduce<Date | null>((acc, expense) => {
+      if (!expense.fecha || expense.archived) return acc;
+      try {
+        const parsed = parseISO(expense.fecha);
+        if (!isValid(parsed)) return acc;
+        const monthStart = startOfMonth(parsed);
+        return acc && acc < monthStart ? acc : monthStart;
+      } catch {
+        return acc;
+      }
+    }, null);
+
+    const startCursor = earliestMonth ? startOfMonth(earliestMonth) : startOfMonth(currentMonth);
+    const endCursor = startOfMonth(currentMonth);
+    let cursor = new Date(startCursor);
+
+    while (cursor < endCursor) {
+      const monthTotal = expenses.reduce((sum, expense) => {
+        if (!expense.fecha || expense.archived) return sum;
+        const occurrences = generateExpenseOccurrences(expense, cursor);
+        if (!occurrences.some((occ) => isSameMonth(occ, cursor))) return sum;
+        return sum + getPaidAmountForPeriod(expense, cursor, history);
+      }, 0);
+
+      historyData.push({
+        key: format(cursor, 'yyyy-MM'),
+        label: format(cursor, 'MMM', { locale: es }),
+        total: monthTotal,
+      });
+
+      cursor = addMonths(cursor, 1);
+    }
+
+    return historyData.slice(-6);
+  }, [expenses, history, currentMonth, getPaidAmountForPeriod]);
+
   // --- CÁLCULO DE LÍMITES POR RUBRO (Prompt 094) ---
   const categoryMetrics = useMemo(() => {
     return categories
@@ -378,6 +440,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [activeIncomes]);
 
   const libreEstimado = totalCobroMensualClientes - totalMonthly;
+
+  const monthlyIncome = totalCobroMensualClientes;
+  const pendingReal = totalPendiente;
+  const currentSurplus = monthlyIncome - totalPagado;
+  const projectedSurplus = monthlyIncome - totalPagado - pendingReal;
 
   const pendingDebtsSum = useMemo(() => 
     debts.filter(d => d.estado !== 'pagada').reduce((sum, d) => sum + (d.saldo_pendiente || 0), 0),
@@ -697,6 +764,84 @@ export const Dashboard: React.FC<DashboardProps> = ({
           description={faltaPagarDescription}
           color={totalPendienteReal > restantePromedio ? 'amber' : 'slate'}
         />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50">
+          <CardHeader className="px-4 md:px-6 py-4">
+            <CardTitle className="text-lg font-black text-slate-900">Resumen financiero</CardTitle>
+            <CardDescription className="text-xs uppercase tracking-[0.24em] text-slate-400">Indicadores clave del mes</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <KPICard compact title="Ingresos del mes" value={`$${monthlyIncome.toLocaleString()}`} icon={<DollarSign className="h-4 w-4 text-indigo-500" />} description="Real / mensual activo" color="indigo" />
+            <KPICard compact title="Pagado" value={`$${totalPagado.toLocaleString()}`} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} description="Total abonado este mes" color="emerald" />
+            <KPICard compact title="Pendiente real" value={`$${pendingReal.toLocaleString()}`} icon={<AlertTriangle className="h-4 w-4 text-rose-500" />} description="Saldo aun no pagado" color="rose" />
+            <KPICard compact title="Sobrante actual" value={`$${currentSurplus.toLocaleString()}`} icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />} description="Ingresos menos pagado" color={currentSurplus >= 0 ? 'emerald' : 'rose'} />
+            <KPICard compact title="Sobrante proyectado" value={`$${projectedSurplus.toLocaleString()}`} icon={<ArrowDownRight className="h-4 w-4 text-indigo-500" />} description="Ingresos menos pagado y pendiente" color={projectedSurplus >= 0 ? 'indigo' : 'rose'} />
+            <KPICard compact title="Gastos fijos" value={`$${fixedMonthlyExpenses.toLocaleString()}`} icon={<CreditCard className="h-4 w-4 text-slate-600" />} description="Solo gastos tipo Fijo" color="slate" />
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50">
+          <CardHeader className="px-4 md:px-6 py-4">
+            <CardTitle className="text-lg font-black text-slate-900">Gastos y tendencias</CardTitle>
+            <CardDescription className="text-xs uppercase tracking-[0.24em] text-slate-400">Últimos meses completos</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-black text-slate-900">Gastos mes a mes</p>
+                <span className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Últimos meses</span>
+              </div>
+              {historicMonthlyPayments.length > 0 ? (
+                <div className="space-y-2">
+                  {historicMonthlyPayments.map((month) => {
+                    const maxValue = Math.max(...historicMonthlyPayments.map((item) => item.total), 1);
+                    const width = Math.round((month.total / maxValue) * 100);
+                    return (
+                      <div key={month.key} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                          <span>{month.label}</span>
+                          <span>${month.total.toLocaleString()}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${width}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No hay meses completos con datos de pago aún.</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-black text-slate-900">Gastos específicos</p>
+                <span className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Categorías</span>
+              </div>
+              {expenseCategoryTotals.hasSpecificTotals ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Supermercado</p>
+                    <p className="mt-2 text-lg font-black text-slate-900">${expenseCategoryTotals.supermarketTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Comida</p>
+                    <p className="mt-2 text-lg font-black text-slate-900">${expenseCategoryTotals.foodTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Limpieza</p>
+                    <p className="mt-2 text-lg font-black text-slate-900">${expenseCategoryTotals.cleaningTotal.toLocaleString()}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No hay clasificación clara de Supermercado, Comida o Limpieza en los datos actuales.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-4">

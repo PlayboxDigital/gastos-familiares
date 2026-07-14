@@ -1,23 +1,32 @@
 export type Priority = 'Esencial' | 'Importante' | 'Prescindible';
 export type PaymentStatus = 'Pagado' | 'Pendiente' | 'Parcial';
 
+export type ConsumoBasePriority = 'alta' | 'media' | 'baja';
+export type ConsumoBasePriorityLabel = 'Alta' | 'Media' | 'Baja';
+
 export interface Producto {
   id: string;
   nombre: string;
   categoria: string;
-  unidad: string;
-  lugar_compra?: string;
+  unidad_base: string;
+  marca?: string;
+  codigo_barras?: string;
+  activo?: boolean;
+  observaciones?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
-export type ProductoInput = Omit<Producto, 'id' | 'created_at'>;
+export type ProductoInput = Omit<Producto, 'id' | 'created_at' | 'updated_at'>;
 
 export interface ConsumoBase {
   id: string;
   producto_id: string;
   cantidad_base: number;
   duracion_meses: number;
-  prioridad: Priority;
+  prioridad: ConsumoBasePriority;
+  // Lugar recomendado para la compra, almacenado en consumo_base
+  lugar_recomendado?: string;
   created_at?: string;
 }
 
@@ -32,7 +41,7 @@ export interface ConsumoBaseItem {
   lugarCompra: string;
   cantidadBase: number;
   duracionMeses: number;
-  prioridad: Priority;
+  prioridad: ConsumoBasePriorityLabel;
 }
 
 export type ConsumoBaseFormValues = Omit<ConsumoBaseItem, 'producto_id' | 'consumo_base_id'>;

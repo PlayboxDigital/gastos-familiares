@@ -59,7 +59,8 @@ import {
   Car,
   Trash2,
   Users,
-  DollarSign
+  DollarSign,
+  Zap
 } from 'lucide-react';
 import {
   Dialog,
@@ -1188,6 +1189,8 @@ export default function App() {
                 ? 'CLM - Prospectos'
                 : activeTab === 'monthly-expenses'
                 ? 'Gastos del Mes'
+                : activeTab === 'consumo-inteligente'
+                ? 'Consumo Inteligente'
                 : 'Configuración'}
             </h2>
           </div>
