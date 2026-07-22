@@ -34,34 +34,56 @@ type ExpenseWithCredit = Expense & {
   monto_final_a_pagar?: number;
 };
 
-const getMontoExigible = (expense: ExpenseWithCredit): number => {
-  return Number(expense.monto || 0);
-};
-const getEstadoPagoReal = (expense: ExpenseWithCredit, history?: GastoPagoHistorial[], currentMonth?: Date): PaymentStatus => {
+const getEstadoPagoReal = (
+  expense: ExpenseWithCredit,
+  history?: GastoPagoHistorial[],
+  currentMonth?: Date
+): PaymentStatus => {
   const montoExigible = getMontoExigible(expense);
 
   if (history && currentMonth) {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
-
-    const paidThisPeriod = history
-      .filter(h => h.gasto_id === expense.id && h.periodo_anio === year && h.periodo_mes === month)
-      .reduce((sum, h) => sum + h.monto_pagado, 0);
+    const paidThisPeriod = getPaidAmountForPeriod(expense.id, year, month, history);
 
     if (montoExigible <= 0) return 'Pagado';
     if (paidThisPeriod >= montoExigible) return 'Pagado';
     if (paidThisPeriod > 0) return 'Parcial';
 
     return 'Pendiente';
-  } else {
-    const totalAbonado = expense.total_abonado ?? 0;
-
-    if (montoExigible <= 0) return 'Pagado';
-    if (totalAbonado >= montoExigible) return 'Pagado';
-    if (totalAbonado > 0) return 'Parcial';
-
-    return 'Pendiente';
   }
+
+  const totalAbonado = expense.total_abonado ?? 0;
+  if (montoExigible <= 0) return 'Pagado';
+  if (totalAbonado >= montoExigible) return 'Pagado';
+  if (totalAbonado > 0) return 'Parcial';
+
+  return 'Pendiente';
+};
+
+const getPaidThisPeriod = (
+  expense: ExpenseWithCredit,
+  history?: GastoPagoHistorial[],
+  currentMonth?: Date
+): number => {
+  if (!history || !currentMonth) {
+    return expense.total_abonado ?? 0;
+  }
+
+  return getPaidAmountForPeriod(expense.id, currentMonth.getFullYear(), currentMonth.getMonth() + 1, history);
+};
+
+const getSaldoPendienteThisPeriod = (
+  expense: ExpenseWithCredit,
+  history?: GastoPagoHistorial[],
+  currentMonth?: Date
+): number => {
+  const montoExigible = getMontoExigible(expense);
+  if (!history || !currentMonth) {
+    return Math.max(0, montoExigible - (expense.total_abonado ?? 0));
+  }
+
+  return getPendingAmountForPeriod(expense, currentMonth.getFullYear(), currentMonth.getMonth() + 1, history);
 };
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
@@ -335,11 +357,12 @@ const estadoPagoReal =
           <TableBody>
             <AnimatePresence mode="popLayout">
               {filteredExpenses.map((e) => {
-                const estadoVencimiento = getEstadoVencimiento(e);
+                const estadoVencimiento = getEstadoVencimiento(e, history, currentMonth);
                 const colorVencimiento = getColorVencimiento(estadoVencimiento);
                 const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
                 const montoExigible = getMontoExigible(e as ExpenseWithCredit);
-                const saldoPendiente = Math.max(0, montoExigible - (e.total_abonado ?? 0));
+                const paidThisPeriod = getPaidThisPeriod(e as ExpenseWithCredit, history, currentMonth);
+                const saldoPendiente = Math.max(0, montoExigible - paidThisPeriod);
 
                 return (
                   <motion.tr
@@ -453,9 +476,9 @@ const estadoPagoReal =
                             ${e.monto.toLocaleString()}
                           </span>
 
-                          {(e.total_abonado ?? 0) > 0 && estadoPagoReal !== 'Pagado' && (
+                          {paidThisPeriod > 0 && estadoPagoReal !== 'Pagado' && (
                             <span className="text-[9px] font-medium text-slate-400">
-                              Abonado: ${(e.total_abonado ?? 0).toLocaleString()}
+                              Abonado: ${paidThisPeriod.toLocaleString()}
                             </span>
                           )}
 
@@ -466,14 +489,14 @@ const estadoPagoReal =
                           )}
                         </div>
 
-                        {(e.total_abonado ?? 0) > 0 && estadoPagoReal !== 'Pagado' && (
+                        {paidThisPeriod > 0 && estadoPagoReal !== 'Pagado' && (
                           <div className="w-16 h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                             <div
                               className="h-full bg-amber-400 transition-all duration-500"
                               style={{
                                 width: `${Math.min(
                                   100,
-                                  montoExigible > 0 ? ((e.total_abonado ?? 0) / montoExigible) * 100 : 100
+                                  montoExigible > 0 ? (paidThisPeriod / montoExigible) * 100 : 100
                                 )}%`
                               }}
                             />
