@@ -61,6 +61,7 @@ interface DashboardProps {
 }
 
 type SpendingPeriod = 'current' | 'previous' | 'last3' | 'all';
+type KpiDetailType = 'income' | 'paid' | 'pending' | 'projected';
 
 const PERSON_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#64748b'];
 
@@ -83,6 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [isCobroModalOpen, setIsCobroModalOpen] = React.useState(false);
   const [activeCobroTab, setActiveCobroTab] = React.useState<string>("debtors");
+  const [activeKpiDetail, setActiveKpiDetail] = React.useState<KpiDetailType | null>(null);
 
   const { currentMonth, currentPeriod } = useMemo(() => {
     const d = new Date();
@@ -274,35 +276,105 @@ const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses]
   );
 
-  const totalPagado = useMemo(
-    () =>
-      monthlyExpenses.reduce((sum, e) => {
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth() + 1;
-        const paidThisMonth = history
-          .filter(h => h.gasto_id === e.id && h.periodo_anio === year && h.periodo_mes === month)
-          .reduce((s, h) => s + h.monto_pagado, 0);
-        
-        const montoExigible = getMontoExigible(e as ExpenseWithCredit);
-        return sum + Math.min(paidThisMonth, montoExigible);
-      }, 0),
+  const paidDetailRows = useMemo(() => {
+    const seenIds = new Set<string>();
+    return monthlyExpenses.flatMap(expense => {
+      const montoExigible = getMontoExigible(expense as ExpenseWithCredit);
+      let remaining = montoExigible;
+
+      return history
+        .filter(payment => {
+          if (seenIds.has(payment.id) || payment.gasto_id !== expense.id) return false;
+          const period = getPaymentEffectivePeriod(payment);
+          return period?.year === currentMonth.getFullYear()
+            && period.month === currentMonth.getMonth() + 1;
+        })
+        .sort((a, b) => {
+          const dateA = new Date(a.fecha_pago || a.fecha_registro || a.created_at || 0).getTime();
+          const dateB = new Date(b.fecha_pago || b.fecha_registro || b.created_at || 0).getTime();
+          return dateA - dateB;
+        })
+        .map(payment => {
+          seenIds.add(payment.id);
+          const actualAmount = Number(payment.monto_pagado) || 0;
+          const amount = Math.min(actualAmount, Math.max(remaining, 0));
+          remaining = Math.max(0, remaining - amount);
+          return {
+            id: payment.id,
+            concept: payment.gasto_concepto_snapshot || expense.subcategoria || expense.concepto || expense.categoria,
+            person: payment.responsable_snapshot || expense.responsable || 'Sin responsable',
+            amount,
+            actualAmount,
+            date: payment.fecha_pago || payment.fecha_registro || payment.created_at,
+            paymentMethod: payment.forma_pago,
+            status: remaining === 0 ? 'Completo' : 'Parcial',
+          };
+        })
+        .filter(row => row.amount > 0);
+    });
+  }, [monthlyExpenses, history, currentMonth]);
+
+  const pendingDetailRows = useMemo(
+    () => monthlyExpenses
+      .map(expense => {
+        const montoExigible = getMontoExigible(expense as ExpenseWithCredit);
+        const paid = getPaidAmountForPeriod(
+          expense.id,
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1,
+          history
+        );
+        const paidConsidered = Math.min(paid, montoExigible);
+        const pending = Math.max(0, montoExigible - paid);
+        const deadline = expense.dia_vencimiento
+          ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), expense.dia_vencimiento)
+          : parseISO(expense.fecha);
+        return {
+          id: expense.id,
+          concept: expense.subcategoria || expense.concepto || expense.categoria,
+          required: montoExigible,
+          paid: paidConsidered,
+          pending,
+          deadline,
+          status: isBefore(deadline, new Date()) ? 'Vencido' : 'Pendiente',
+        };
+      })
+      .filter(row => row.pending > 0),
     [monthlyExpenses, history, currentMonth]
   );
 
-  const totalPendiente = useMemo(
-    () =>
-      monthlyExpenses.reduce((sum, e) => {
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth() + 1;
-        const paidThisMonth = history
-          .filter(h => h.gasto_id === e.id && h.periodo_anio === year && h.periodo_mes === month)
-          .reduce((s, h) => s + h.monto_pagado, 0);
-
-        const montoExigible = getMontoExigible(e as ExpenseWithCredit);
-        const saldo = Math.max(0, montoExigible - paidThisMonth);
-        return sum + saldo;
-      }, 0),
+  const projectedCommitmentRows = useMemo(
+    () => monthlyExpenses
+      .map(expense => {
+        const required = getMontoExigible(expense as ExpenseWithCredit);
+        const paid = Math.min(
+          getPaidAmountForPeriod(
+            expense.id,
+            currentMonth.getFullYear(),
+            currentMonth.getMonth() + 1,
+            history
+          ),
+          required
+        );
+        const pending = Math.max(0, required - paid);
+        return {
+          id: expense.id,
+          concept: expense.subcategoria || expense.concepto || expense.categoria,
+          amount: paid + pending,
+        };
+      })
+      .filter(row => row.amount > 0),
     [monthlyExpenses, history, currentMonth]
+  );
+
+  const totalPagado = useMemo(
+    () => paidDetailRows.reduce((sum, row) => sum + row.amount, 0),
+    [paidDetailRows]
+  );
+
+  const totalPendiente = useMemo(
+    () => pendingDetailRows.reduce((sum, row) => sum + row.pending, 0),
+    [pendingDetailRows]
   );
 
   const fixedMonthlyExpenses = useMemo(
@@ -418,6 +490,18 @@ const Dashboard: React.FC<DashboardProps> = ({
       return isStatusActive;
     });
   }, [incomes]);
+
+  const incomeDetailRows = useMemo(
+    () => activeIncomes.map(income => ({
+      id: income.id,
+      concept: income.concepto || income.descripcion_servicio || income.cliente,
+      source: income.cliente || 'Sin fuente',
+      amount: income.monto_mensual || income.monto_mensual_ars || income.monto || income.monto_total || 0,
+      status: income.estado || income.estado_pago || 'activo',
+      period: currentPeriod,
+    })),
+    [activeIncomes, currentPeriod]
+  );
 
   const totalCobroMensualClientes = useMemo(() => {
     return activeIncomes.reduce((sum, i) => {
@@ -728,6 +812,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           icon={<DollarSign className="h-5 w-5" />}
           description="Ingresos mensuales activos"
           color="emerald"
+          onClick={() => setActiveKpiDetail('income')}
         />
         <KPICard
           title="Pagado este mes"
@@ -735,6 +820,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           icon={<CheckCircle2 className="h-5 w-5" />}
           description="Pagos reales registrados"
           color="indigo"
+          onClick={() => setActiveKpiDetail('paid')}
         />
         <KPICard
           title="Pendiente real"
@@ -742,6 +828,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           icon={<AlertTriangle className="h-5 w-5" />}
           description={pagosPendientesUnified.some((item) => item.isVencido) ? 'Incluye pagos vencidos' : 'Saldo pendiente del mes'}
           color={pendingReal > 0 ? 'amber' : 'emerald'}
+          onClick={() => setActiveKpiDetail('pending')}
         />
         <KPICard
           title="Disponible proyectado"
@@ -749,8 +836,152 @@ const Dashboard: React.FC<DashboardProps> = ({
           icon={<Wallet className="h-5 w-5" />}
           description={`Disponible hoy: $${currentSurplus.toLocaleString('es-AR')}`}
           color={projectedSurplus >= 0 ? 'emerald' : 'rose'}
+          onClick={() => setActiveKpiDetail('projected')}
         />
       </div>
+
+      <Dialog open={activeKpiDetail !== null} onOpenChange={(open) => !open && setActiveKpiDetail(null)}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[92dvh] w-[calc(100vw-16px)] max-w-3xl gap-0 overflow-hidden rounded-3xl border-none p-0 shadow-2xl"
+        >
+          <DialogHeader className="sticky top-0 z-10 border-b border-slate-100 bg-white px-5 py-5 pr-16 md:px-7">
+            <DialogTitle className="text-xl font-black tracking-tight text-slate-900">
+              {activeKpiDetail === 'income' && 'Ingresos del mes'}
+              {activeKpiDetail === 'paid' && 'Pagado este mes'}
+              {activeKpiDetail === 'pending' && 'Pendiente real'}
+              {activeKpiDetail === 'projected' && 'Disponible proyectado'}
+            </DialogTitle>
+            <CardDescription className="text-xs uppercase tracking-[0.18em] text-slate-400">
+              Detalle de los conceptos incluidos en el KPI
+            </CardDescription>
+            <DialogClose className="absolute right-5 top-5 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <X className="h-5 w-5" />
+              <span className="sr-only">Cerrar</span>
+            </DialogClose>
+          </DialogHeader>
+
+          <div className="max-h-[calc(92dvh-108px)] overflow-y-auto bg-slate-50/50 p-4 md:p-6">
+            {activeKpiDetail === 'income' && (
+              <KpiDetailSection
+                isEmpty={incomeDetailRows.length === 0}
+                footerLabel="Total ingresos del mes"
+                footerValue={monthlyIncome}
+              >
+                {incomeDetailRows.map(row => (
+                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-black text-slate-900">{row.concept}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">{row.source}</p>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          {row.status} · {row.period}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-black tabular-nums text-emerald-600">${row.amount.toLocaleString('es-AR')}</p>
+                    </div>
+                  </div>
+                ))}
+              </KpiDetailSection>
+            )}
+
+            {activeKpiDetail === 'paid' && (
+              <KpiDetailSection
+                isEmpty={paidDetailRows.length === 0}
+                footerLabel="Total pagado este mes"
+                footerValue={totalPagado}
+              >
+                {paidDetailRows.map(row => {
+                  const paymentDate = row.date ? new Date(row.date) : null;
+                  return (
+                    <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="truncate font-black text-slate-900">{row.concept}</p>
+                          <p className="mt-1 text-xs font-bold text-slate-500">{row.person}</p>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
+                            <span className={row.status === 'Completo' ? 'text-emerald-600' : 'text-amber-600'}>{row.status}</span>
+                            {paymentDate && isValid(paymentDate) && <span className="text-slate-400">{format(paymentDate, 'dd MMM yyyy', { locale: es })}</span>}
+                            {row.paymentMethod && <span className="text-slate-400">{row.paymentMethod}</span>}
+                          </div>
+                        </div>
+                        <p className="shrink-0 font-black tabular-nums text-indigo-600">${row.amount.toLocaleString('es-AR')}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </KpiDetailSection>
+            )}
+
+            {activeKpiDetail === 'pending' && (
+              <KpiDetailSection
+                isEmpty={pendingDetailRows.length === 0}
+                footerLabel="Total pendiente real"
+                footerValue={pendingReal}
+              >
+                {pendingDetailRows.map(row => (
+                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-black text-slate-900">{row.concept}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">
+                          Exigible: ${row.required.toLocaleString('es-AR')} · Pagado: ${row.paid.toLocaleString('es-AR')}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
+                          <span className={row.status === 'Vencido' ? 'text-rose-600' : 'text-amber-600'}>{row.status}</span>
+                          <span className="text-slate-400">Vence {format(row.deadline, 'dd MMM yyyy', { locale: es })}</span>
+                        </div>
+                      </div>
+                      <p className="shrink-0 font-black tabular-nums text-amber-600">${row.pending.toLocaleString('es-AR')}</p>
+                    </div>
+                  </div>
+                ))}
+              </KpiDetailSection>
+            )}
+
+            {activeKpiDetail === 'projected' && (
+              <div className="space-y-5">
+                <KpiDetailSection
+                  title="Ingresos"
+                  isEmpty={incomeDetailRows.length === 0}
+                  footerLabel="Subtotal ingresos"
+                  footerValue={monthlyIncome}
+                >
+                  {incomeDetailRows.map(row => (
+                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3">
+                      <p className="truncate text-sm font-bold text-slate-700">{row.concept}</p>
+                      <p className="shrink-0 font-black text-emerald-600">${row.amount.toLocaleString('es-AR')}</p>
+                    </div>
+                  ))}
+                </KpiDetailSection>
+
+                <KpiDetailSection
+                  title="Compromisos proyectados"
+                  isEmpty={projectedCommitmentRows.length === 0}
+                  footerLabel="Subtotal proyectado"
+                  footerValue={totalPagado + pendingReal}
+                >
+                  {projectedCommitmentRows.map(row => (
+                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3">
+                      <p className="truncate text-sm font-bold text-slate-700">{row.concept}</p>
+                      <p className="shrink-0 font-black text-rose-600">${row.amount.toLocaleString('es-AR')}</p>
+                    </div>
+                  ))}
+                </KpiDetailSection>
+
+                <div className="rounded-2xl bg-slate-900 p-5 text-white">
+                  <div className="space-y-2 text-sm font-bold">
+                    <div className="flex justify-between gap-4"><span>Ingresos del mes</span><span>${monthlyIncome.toLocaleString('es-AR')}</span></div>
+                    <div className="flex justify-between gap-4 text-slate-300"><span>menos compromisos proyectados</span><span>− ${(totalPagado + pendingReal).toLocaleString('es-AR')}</span></div>
+                    <div className="border-t border-white/20 pt-3 text-lg font-black flex justify-between gap-4"><span>Disponible proyectado</span><span>${projectedSurplus.toLocaleString('es-AR')}</span></div>
+                    <div className="flex justify-between gap-4 text-xs text-emerald-300"><span>Disponible hoy</span><span>${currentSurplus.toLocaleString('es-AR')}</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {(pagosPendientesUnified.length > 0 || clientesPorCobrar.length > 0) && (
         <Card className="overflow-hidden rounded-3xl border-none bg-white shadow-xl shadow-slate-200/50">
@@ -1326,6 +1557,37 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 };
 
+interface KpiDetailSectionProps {
+  title?: string;
+  isEmpty: boolean;
+  footerLabel: string;
+  footerValue: number;
+  children: React.ReactNode;
+}
+
+const KpiDetailSection: React.FC<KpiDetailSectionProps> = ({
+  title,
+  isEmpty,
+  footerLabel,
+  footerValue,
+  children,
+}) => (
+  <section className="space-y-3">
+    {title && <h3 className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{title}</h3>}
+    {isEmpty ? (
+      <div className="rounded-2xl bg-white py-10 text-center text-sm font-bold text-slate-400">
+        No hay movimientos para este período.
+      </div>
+    ) : (
+      <div className="space-y-2">{children}</div>
+    )}
+    <div className="sticky bottom-0 flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{footerLabel}</span>
+      <span className="text-lg font-black tabular-nums text-slate-900">${footerValue.toLocaleString('es-AR')}</span>
+    </div>
+  </section>
+);
+
 // Subcomponente de Icono para Props
 const FlagIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
@@ -1375,7 +1637,16 @@ const KPICard: React.FC<KPICardProps> = ({
       whileHover={{ scale: 1.02, y: -4 }}
       transition={{ type: "spring", stiffness: 300 }}
       onClick={onClick}
-      className={onClick ? 'cursor-pointer' : ''}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `Ver detalle de ${title}` : undefined}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className={onClick ? 'cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2' : ''}
     >
       <Card className={`relative h-full overflow-hidden border-none bg-white p-3 md:p-5 shadow-xl transition-all duration-300 ${compact ? 'rounded-xl md:rounded-[1.5rem]' : 'rounded-2xl md:rounded-[2rem]'}`}>
         <div className={`absolute -right-6 -top-6 h-12 w-12 md:h-20 md:w-20 rounded-full opacity-[0.03] ${iconBgStyles[color]}`} />
