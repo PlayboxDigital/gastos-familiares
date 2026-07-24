@@ -40,7 +40,7 @@ import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
 import { ExpenseList } from './components/ExpenseList';
 import { ConsumoInteligente } from './components/ConsumoInteligente';
-import { generateExpenseOccurrences, isVariableExpense } from './utils/expenseLogic';
+import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense } from './utils/expenseLogic';
 
 import {
   Plus,
@@ -71,21 +71,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 
-type ExpenseWithCredit = Expense & {
-  saldo_a_favor_aplicado?: number;
-  monto_final_a_pagar?: number;
-};
-
-const getMontoExigible = (expense: ExpenseWithCredit): number => {
-  if (typeof expense.monto_final_a_pagar === 'number') {
-    return Math.max(0, expense.monto_final_a_pagar);
-  }
-
-  return Math.max(0, expense.monto - (expense.saldo_a_favor_aplicado ?? 0));
-};
-
 const getEstadoPagoReal = (
-  expense: ExpenseWithCredit,
+  expense: Expense,
   totalAbonadoOverride?: number
 ): PaymentStatus => {
   const montoExigible = getMontoExigible(expense);
@@ -576,7 +563,7 @@ export default function App() {
 
       const updateData: any = {
         total_abonado: sumaPagos,
-        estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, sumaPagos)
+        estado_pago: getEstadoPagoReal(originalExpense, sumaPagos)
       };
       if (fechaMasReciente) updateData.fecha_pago = fechaMasReciente;
 
@@ -643,7 +630,7 @@ export default function App() {
       
       await gastosService.actualizarGasto(duplicate.id, {
         total_abonado: newTotalAbonado,
-        estado_pago: getEstadoPagoReal(duplicate as ExpenseWithCredit, newTotalAbonado)
+        estado_pago: getEstadoPagoReal(duplicate, newTotalAbonado)
       });
       
       // Eliminar el gasto ahora orfano
@@ -736,7 +723,7 @@ export default function App() {
             const newTotalAbonado = Math.max(0, (originalExpense.total_abonado || 0) - pago.monto_pagado);
             const updateData = {
               total_abonado: newTotalAbonado,
-              estado_pago: getEstadoPagoReal(originalExpense as ExpenseWithCredit, newTotalAbonado)
+              estado_pago: getEstadoPagoReal(originalExpense, newTotalAbonado)
             };
             
             await gastosService.actualizarGasto(gastoId, updateData as any);
@@ -824,7 +811,9 @@ export default function App() {
     </div>
   );
      case 'monthly-status': {
-  const fixedExpenses = expenses.filter(e => e.tipo === 'Fijo' && e.archived !== true);
+  const fixedExpenses = expenses.filter(e =>
+    e.tipo === 'Fijo' && e.archived !== true && isExpenseApplicableInMonth(e, currentMonth)
+  );
 
   const variableExpenses = expenses.filter(e => {
     if (e.tipo !== 'Variable' || e.archived === true) return false;
@@ -836,8 +825,8 @@ export default function App() {
     return isSameMonth(expenseDate, currentMonth);
   });
 
-  const totalFijos = fixedExpenses.reduce((sum, e) => sum + Number(e.monto || 0), 0);
-  const totalVariables = variableExpenses.reduce((sum, e) => sum + Number(e.monto || 0), 0);
+  const totalFijos = fixedExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0);
+  const totalVariables = variableExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0);
 
   return (
     <div className="space-y-8">
@@ -933,7 +922,7 @@ export default function App() {
                 </td>
 
                 <td className="px-4 py-4 text-right font-black text-slate-900">
-                  ${Number(expense.monto || 0).toLocaleString('es-AR')}
+                  ${getMontoExigible(expense, currentMonth).toLocaleString('es-AR')}
                 </td>
 
 <td className="px-4 py-4 text-right">

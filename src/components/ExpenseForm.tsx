@@ -66,6 +66,15 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         dia_vencimiento: expenseToEdit.dia_vencimiento || (expenseToEdit.fecha ? new Date(expenseToEdit.fecha + 'T12:00:00').getDate() : new Date().getDate()),
         tipo_gasto: expenseToEdit.tipo_gasto || (expenseToEdit.tipo?.toLowerCase() === 'variable' ? 'variable' : 'fijo'),
         tipo: expenseToEdit.tipo || 'Fijo',
+        monto_final_a_pagar: expenseToEdit.monto_final_a_pagar,
+        saldo_a_favor_aplicado: expenseToEdit.saldo_a_favor_aplicado,
+        descuento: expenseToEdit.descuento,
+        credito: expenseToEdit.credito,
+        monto_neto: expenseToEdit.monto_neto,
+        cantidad_cuotas: expenseToEdit.cantidad_cuotas,
+        cuota_actual: expenseToEdit.cuota_actual,
+        fecha_inicio_cuotas: expenseToEdit.fecha_inicio_cuotas,
+        monto_cuota: expenseToEdit.monto_cuota,
         // Preservar campos que no están en el formulario pero son parte del modelo
         ...((expenseToEdit as any).id_pago_original ? { id_pago_original: (expenseToEdit as any).id_pago_original } : {}),
       });

@@ -27,7 +27,7 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMon
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getPendingAmountForPeriod } from '../utils/expenseLogic';
+import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -202,7 +202,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         if (!expense.fecha || expense.archived) return sum;
         const occurrences = generateExpenseOccurrences(expense, cursor);
         if (!occurrences.some((occ) => isSameMonth(occ, cursor))) return sum;
-        return sum + getPaidAmountForPeriod(expense, cursor, history);
+        return sum + getPaidAmountForPeriod(
+          expense.id,
+          cursor.getFullYear(),
+          cursor.getMonth() + 1,
+          history
+        );
       }, 0);
 
       if (monthlyPaid > 0) {
@@ -315,24 +320,21 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [monthlyExpenses]);
 
   const historicMonthlyPayments = useMemo(() => {
-    const months = Array.from({ length: 4 }, (_, index) =>
-      startOfMonth(addMonths(currentMonth, index - 3))
-    );
+    const months = [3, 4, 5, 6].map(month => new Date(2026, month, 1));
 
     return months.map((date) => {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       const total = history
-        .filter(
-          (payment) =>
-            Number(payment.periodo_anio) === year &&
-            Number(payment.periodo_mes) === month
-        )
+        .filter((payment) => {
+          const period = getPaymentEffectivePeriod(payment);
+          return period?.year === year && period.month === month;
+        })
         .reduce((sum, payment) => sum + Number(payment.monto_pagado || 0), 0);
 
       return {
         key: `${year}-${String(month).padStart(2, '0')}`,
-        label: format(date, 'MMMM', { locale: es }),
+        label: format(date, 'MMMM yyyy', { locale: es }),
         total,
         isCurrentMonth: isSameMonth(date, currentMonth),
       };

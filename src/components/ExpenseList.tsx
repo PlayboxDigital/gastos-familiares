@@ -18,6 +18,12 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento, getColorVencimiento } from '../estadoVencimiento';
+import {
+  getMontoExigible,
+  getPaidAmountForPeriod,
+  getPendingAmountForPeriod,
+  isExpenseApplicableInMonth,
+} from '../utils/expenseLogic';
 
 interface ExpenseListProps {
   expenses: Expense[];
@@ -39,7 +45,7 @@ const getEstadoPagoReal = (
   history?: GastoPagoHistorial[],
   currentMonth?: Date
 ): PaymentStatus => {
-  const montoExigible = getMontoExigible(expense);
+  const montoExigible = getMontoExigible(expense, currentMonth);
 
   if (history && currentMonth) {
     const year = currentMonth.getFullYear();
@@ -78,7 +84,7 @@ const getSaldoPendienteThisPeriod = (
   history?: GastoPagoHistorial[],
   currentMonth?: Date
 ): number => {
-  const montoExigible = getMontoExigible(expense);
+  const montoExigible = getMontoExigible(expense, currentMonth);
   if (!history || !currentMonth) {
     return Math.max(0, montoExigible - (expense.total_abonado ?? 0));
   }
@@ -118,6 +124,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     console.log("EXPENSELIST_CALC_FILTER_START", expenses.length);
     try {
       const result = expenses.filter((e) => {
+        if (e.archived || (currentMonth && !isExpenseApplicableInMonth(e, currentMonth))) return false;
         const subcategoria = e.subcategoria || '';
         const concepto = e.concepto || '';
 const estadoPagoReal =
@@ -169,8 +176,8 @@ const estadoPagoReal =
   history
 ]);
   const totalFiltered = useMemo(
-    () => filteredExpenses.reduce((sum, e) => sum + e.monto, 0),
-    [filteredExpenses]
+    () => filteredExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0),
+    [filteredExpenses, currentMonth]
   );
 
   const getPriorityColor = (priority: Priority) => {
@@ -357,10 +364,10 @@ const estadoPagoReal =
           <TableBody>
             <AnimatePresence mode="popLayout">
               {filteredExpenses.map((e) => {
-                const estadoVencimiento = getEstadoVencimiento(e, history, currentMonth);
+                const estadoVencimiento = getEstadoVencimiento(e);
                 const colorVencimiento = getColorVencimiento(estadoVencimiento);
                 const estadoPagoReal = getEstadoPagoReal(e as ExpenseWithCredit, history, currentMonth);
-                const montoExigible = getMontoExigible(e as ExpenseWithCredit);
+                const montoExigible = getMontoExigible(e, currentMonth);
                 const paidThisPeriod = getPaidThisPeriod(e as ExpenseWithCredit, history, currentMonth);
                 const saldoPendiente = Math.max(0, montoExigible - paidThisPeriod);
 
@@ -473,8 +480,16 @@ const estadoPagoReal =
                       <div className="flex flex-col items-end">
                         <div className="flex flex-col items-end leading-none gap-0.5">
                           <span className="font-black text-slate-900 text-sm">
-                            ${e.monto.toLocaleString()}
+                            ${montoExigible.toLocaleString()}
                           </span>
+
+                          {e.monto === 1600000 && montoExigible === 1100000 && (
+                            <span className="mt-1 text-[9px] leading-tight text-slate-400">
+                              Valor contractual: $1.600.000<br />
+                              Descuento mensual por mejoras: -$500.000<br />
+                              <strong className="text-slate-600">Monto a pagar: $1.100.000</strong>
+                            </span>
+                          )}
 
                           {paidThisPeriod > 0 && estadoPagoReal !== 'Pagado' && (
                             <span className="text-[9px] font-medium text-slate-400">

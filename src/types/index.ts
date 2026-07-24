@@ -64,6 +64,16 @@ export interface Expense {
   created_at?: string;
   dia_vencimiento?: number;
   archived?: boolean;
+  monto_final_a_pagar?: number;
+  saldo_a_favor_aplicado?: number;
+  saldo_a_favor_generado?: number;
+  descuento?: number;
+  credito?: number;
+  monto_neto?: number;
+  cantidad_cuotas?: number;
+  cuota_actual?: number;
+  fecha_inicio_cuotas?: string;
+  monto_cuota?: number;
 }
 
 export interface GastoPagoHistorial {

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { cloudinaryService } from '../services/cloudinary';
 import { getEstadoVencimiento } from '../estadoVencimiento';
+import { getMontoExigible } from '../utils/expenseLogic';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -46,12 +47,6 @@ interface PaymentModalProps {
   onConfirm: (pago: GastoPagoHistorialInput) => void;
   expense: Expense | null;
 }
-
-type ExpenseWithCredit = Expense & {
-  saldo_a_favor_aplicado?: number;
-  monto_final_a_pagar?: number;
-  saldo_a_favor_generado?: number;
-};
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -64,11 +59,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onConfirm,
   expense,
 }) => {
-  const expenseData = expense as ExpenseWithCredit | null;
+  const expenseData = expense;
 
   const montoBase = expenseData?.monto ?? 0;
   const totalAbonado = expenseData?.total_abonado ?? 0;
-  const saldoAFavorAplicado = expenseData?.saldo_a_favor_aplicado ?? 0;
 
   const estadoVencimiento = useMemo(() => {
     if (!expenseData) return 'en_plazo';
@@ -107,12 +101,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const montoExigible = useMemo(() => {
     if (!expenseData) return 0;
 
-    if (typeof expenseData.monto_final_a_pagar === 'number') {
-      return Math.max(0, expenseData.monto_final_a_pagar);
-    }
-
-    return Math.max(0, montoBase - saldoAFavorAplicado);
-  }, [expenseData, montoBase, saldoAFavorAplicado]);
+    return getMontoExigible(expenseData, new Date());
+  }, [expenseData]);
+  const saldoAFavorAplicado = Math.max(0, montoBase - montoExigible);
 
   const restanteReal = useMemo(() => {
     return Math.max(0, montoExigible - totalAbonado);

@@ -290,7 +290,7 @@ const mensaje = prospecto.mensaje || 'Holaa 😊 ¿Cómo estás?';
           continue;
         }
 
-        const mensaje = generateAutoMessage(nombre, rubro);
+        const mensaje = generateAutoMessage();
 
         newProspectos.push({
           nombre_empresa: nombre,
