@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Wrench,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -84,6 +85,7 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
   const [tareas, setTareas] = useState<AutoTarea[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingMovimiento, setEditingMovimiento] = useState<AutoMovimiento | null>(null);
   const [isTareaFormOpen, setIsTareaFormOpen] = useState(false);
   const [newMov, setNewMov] = useState<AutoMovimientoInput>({
     auto_id: auto.id,
@@ -123,23 +125,55 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
     fetchMovimientos();
   }, [fetchMovimientos]);
 
-  const handleCreateMovimiento = async (e: React.FormEvent) => {
+  const resetMovimientoForm = React.useCallback(() => {
+    setNewMov({
+      auto_id: auto.id,
+      fecha: format(new Date(), 'yyyy-MM-dd'),
+      concepto: '',
+      categoria: '',
+      monto: 0,
+      observaciones: '',
+    });
+    setEditingMovimiento(null);
+  }, [auto.id]);
+
+  const openCreateMovimiento = () => {
+    resetMovimientoForm();
+    setIsFormOpen(true);
+  };
+
+  const openEditMovimiento = (movimiento: AutoMovimiento) => {
+    setEditingMovimiento(movimiento);
+    setNewMov({
+      auto_id: movimiento.auto_id,
+      fecha: movimiento.fecha,
+      concepto: movimiento.concepto,
+      categoria: movimiento.categoria,
+      monto: movimiento.monto,
+      observaciones: movimiento.observaciones || '',
+    });
+    setIsFormOpen(true);
+  };
+
+  const handleSaveMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
+    const monto = Number(newMov.monto);
+    if (!Number.isFinite(monto) || monto < 0) return;
+
     try {
-      await autosService.crearMovimiento(newMov);
+      const payload = { ...newMov, monto };
+      if (editingMovimiento) {
+        await autosService.actualizarMovimiento(editingMovimiento.id, payload);
+      } else {
+        await autosService.crearMovimiento(payload);
+      }
       setIsFormOpen(false);
-      setNewMov({
-        auto_id: auto.id,
-        fecha: format(new Date(), 'yyyy-MM-dd'),
-        concepto: '',
-        categoria: '',
-        monto: 0,
-        observaciones: '',
-      });
-      fetchMovimientos();
+      resetMovimientoForm();
+      await fetchMovimientos();
       if (onUpdate) onUpdate();
+      window.dispatchEvent(new CustomEvent('vehicle-movements-changed'));
     } catch (error) {
-      console.error('Error creating movimiento:', error);
+      console.error('Error saving movimiento:', error);
     }
   };
 
@@ -205,6 +239,27 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
 
   const cantidadMovimientos = movimientos.length + legacyGastos.length;
 
+  const gastosYArreglosRealizados = [
+    ...movimientos.map(movimiento => ({
+      key: `movimiento:${movimiento.id}`,
+      source: 'movimiento' as const,
+      concepto: movimiento.concepto,
+      monto: movimiento.monto,
+      categoria: movimiento.categoria,
+      fecha: movimiento.fecha,
+      observaciones: movimiento.observaciones,
+      movimiento,
+    })),
+    ...legacyGastos.map((gasto, index) => ({
+      key: `inicial:${index}:${gasto.concepto}`,
+      source: 'inicial' as const,
+      concepto: gasto.concepto,
+      monto: gasto.monto,
+      categoria: 'Gasto inicial',
+      pagadoPor: gasto.pagadoPor,
+    })),
+  ];
+
   const totalTareasPendientesSistema = tareas.filter(t => t.estado === 'pendiente').length;
   const costoEstimadoTareasSistema = tareas
     .filter(t => t.estado === 'pendiente')
@@ -229,7 +284,7 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Gasto Histórico</p>
             <p className="text-2xl font-black text-blue-600 leading-tight">${total.toLocaleString()}</p>
           </div>
-          <Button onClick={() => setIsFormOpen(true)} className="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl px-6 h-12 active:scale-95 transition-transform">
+          <Button onClick={openCreateMovimiento} className="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl px-6 h-12 active:scale-95 transition-transform">
             <Plus className="w-5 h-5 mr-2" />
             Agregar gasto
           </Button>
@@ -290,23 +345,67 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
           <CardHeader className="bg-white border-b border-slate-50 p-6">
             <CardTitle className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-blue-600" />
-              Toyota Corona — gastos iniciales cargados
+              Toyota Corona — gastos y arreglos realizados
             </CardTitle>
             <CardDescription className="font-medium text-slate-500">
-              Carga visual basada en la planilla original. Luego se puede migrar a base de datos.
+              Historial completo de gastos, repuestos, reparaciones y mantenimientos del vehículo.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {legacyGastos.map((gasto, index) => (
-                <div key={`${gasto.concepto}-${index}`} className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 flex items-center justify-between gap-3">
+              {gastosYArreglosRealizados.map(item => (
+                <div
+                  key={item.key}
+                  className={`group rounded-2xl border p-4 flex items-center justify-between gap-3 ${
+                    item.source === 'movimiento'
+                      ? 'border-blue-100 bg-blue-50/60'
+                      : 'border-emerald-100 bg-emerald-50/60'
+                  }`}
+                >
                   <div className="min-w-0">
-                    <p className="font-black text-sm text-slate-900 truncate">{gasto.concepto}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mt-1">
-                      Pagó: {gasto.pagadoPor}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-sm text-slate-900 truncate">{item.concepto}</p>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider ${
+                        item.source === 'movimiento'
+                          ? 'bg-blue-100 text-blue-600'
+                          : 'bg-emerald-100 text-emerald-600'
+                      }`}>
+                        {item.source === 'movimiento' ? 'Movimiento registrado' : 'Gasto inicial'}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      <span>{item.categoria}</span>
+                      {'fecha' in item && item.fecha && (
+                        <span>{format(parseISO(item.fecha), 'dd MMM yyyy', { locale: es })}</span>
+                      )}
+                      {'pagadoPor' in item && item.pagadoPor && (
+                        <span className="text-emerald-600">Pagó: {item.pagadoPor}</span>
+                      )}
+                    </div>
+                    {'observaciones' in item && item.observaciones && (
+                      <p className="mt-1 truncate text-[10px] italic text-slate-400">{item.observaciones}</p>
+                    )}
                   </div>
-                  <p className="font-black text-sm text-emerald-700 shrink-0">${gasto.monto.toLocaleString()}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <p className={`font-black text-sm ${
+                      item.source === 'movimiento' ? 'text-blue-700' : 'text-emerald-700'
+                    }`}>
+                      ${item.monto.toLocaleString()}
+                    </p>
+                    {item.source === 'movimiento' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEditMovimiento(item.movimiento)}
+                        className="h-8 w-8 rounded-lg text-blue-400 opacity-100 hover:bg-blue-100 hover:text-blue-700 md:opacity-0 md:group-hover:opacity-100"
+                        title="Editar"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span className="sr-only">Editar</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -346,18 +445,19 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
                   <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-5 px-6">Fecha</TableHead>
                   <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-5">Concepto / Categoría</TableHead>
                   <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest py-5 text-right pr-6">Monto</TableHead>
+                  <TableHead className="w-14 py-5 pr-4"><span className="sr-only">Acciones</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-12">
+                    <TableCell colSpan={4} className="text-center py-12">
                       <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : movimientos.length > 0 ? (
                   movimientos.map((m) => (
-                    <TableRow key={m.id} className="hover:bg-slate-50/50 transition-colors border-slate-50">
+                    <TableRow key={m.id} className="group hover:bg-slate-50/50 transition-colors border-slate-50">
                       <TableCell className="py-5 px-6">
                         <div className="text-sm font-bold text-slate-700">
                           {format(parseISO(m.fecha), "dd 'de' MMM", { locale: es })}
@@ -372,11 +472,24 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
                       <TableCell className="py-5 text-right pr-6 font-black text-slate-900 text-base">
                         ${m.monto.toLocaleString()}
                       </TableCell>
+                      <TableCell className="py-5 pr-4">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditMovimiento(m)}
+                          className="h-8 w-8 rounded-lg text-slate-300 opacity-100 transition hover:bg-blue-50 hover:text-blue-600 md:opacity-0 md:group-hover:opacity-100"
+                          title="Editar"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span className="sr-only">Editar</span>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-12 text-slate-400 italic">
+                    <TableCell colSpan={4} className="text-center py-12 text-slate-400 italic">
                       No hay movimientos registrados en la base para este auto.
                     </TableCell>
                   </TableRow>
@@ -508,15 +621,25 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
         </CardContent>
       </Card>
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) resetMovimientoForm();
+        }}
+      >
         <DialogContent className="max-md:h-auto max-md:max-h-[85dvh] max-md:p-0 max-md:gap-0 sm:max-w-[425px] overflow-hidden flex flex-col">
           <div className="p-6 border-b shrink-0 pt-10 md:pt-6 bg-slate-50/50">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">Agregar Gasto</DialogTitle>
-              <DialogDescription className="font-medium text-slate-500">Registra un nuevo gasto o mantenimiento para tu vehículo.</DialogDescription>
+              <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">
+                {editingMovimiento ? 'Editar movimiento' : 'Agregar Gasto'}
+              </DialogTitle>
+              <DialogDescription className="font-medium text-slate-500">
+                {editingMovimiento ? 'Actualiza los datos del movimiento seleccionado.' : 'Registra un nuevo gasto o mantenimiento para tu vehículo.'}
+              </DialogDescription>
             </DialogHeader>
           </div>
-          <form id="auto-mov-form" onSubmit={handleCreateMovimiento} className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
+          <form id="auto-mov-form" onSubmit={handleSaveMovimiento} className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="fecha" className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
@@ -538,6 +661,8 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
                 <Input
                   id="monto"
                   type="number"
+                  min="0"
+                  step="any"
                   value={newMov.monto}
                   onChange={e => handleInputChange('monto', Number(e.target.value))}
                   required
@@ -589,7 +714,7 @@ export const AutoDetail: React.FC<AutoDetailProps> = ({ auto, onUpdate }) => {
           </form>
           <div className="p-4 md:p-6 border-t shrink-0 bg-white">
             <Button form="auto-mov-form" type="submit" className="w-full bg-slate-900 hover:bg-black text-white h-14 rounded-2xl font-black transition-all shadow-lg uppercase tracking-widest text-xs active:scale-95">
-              Registrar Gasto
+              {editingMovimiento ? 'Guardar cambios' : 'Registrar Gasto'}
             </Button>
           </div>
         </DialogContent>
