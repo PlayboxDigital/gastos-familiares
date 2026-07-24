@@ -32,6 +32,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -45,6 +59,10 @@ interface DashboardProps {
   onSelectIncome?: (clientName: string) => void;
   onSelectDebtors?: () => void;
 }
+
+type SpendingPeriod = 'current' | 'previous' | 'last3' | 'all';
+
+const PERSON_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#64748b'];
 
 type ExpenseWithCredit = Expense & {
   saldo_a_favor_aplicado?: number;
@@ -340,6 +358,58 @@ const Dashboard: React.FC<DashboardProps> = ({
       };
     });
   }, [history, currentMonth]);
+
+  const [spendingPeriod, setSpendingPeriod] = React.useState<SpendingPeriod>('current');
+
+  const spendingByPerson = useMemo(() => {
+    const currentYear = currentMonth.getFullYear();
+    const currentMonthNumber = currentMonth.getMonth() + 1;
+    const currentIndex = currentYear * 12 + currentMonthNumber - 1;
+    const seenPaymentIds = new Set<string>();
+    const grouped = new Map<string, { total: number; payments: number }>();
+
+    history.forEach(payment => {
+      if (seenPaymentIds.has(payment.id)) return;
+      seenPaymentIds.add(payment.id);
+
+      const period = getPaymentEffectivePeriod(payment);
+      if (!period) return;
+      const paymentIndex = period.year * 12 + period.month - 1;
+
+      const isInPeriod =
+        spendingPeriod === 'all' ||
+        (spendingPeriod === 'current' && paymentIndex === currentIndex) ||
+        (spendingPeriod === 'previous' && paymentIndex === currentIndex - 1) ||
+        (spendingPeriod === 'last3' && paymentIndex >= currentIndex - 2 && paymentIndex <= currentIndex);
+
+      if (!isInPeriod) return;
+
+      const person = payment.responsable_snapshot?.trim() || 'Sin responsable';
+      const amount = Number(payment.monto_pagado) || 0;
+      const previous = grouped.get(person) || { total: 0, payments: 0 };
+      grouped.set(person, {
+        total: previous.total + amount,
+        payments: previous.payments + 1,
+      });
+    });
+
+    const total = Array.from(grouped.values()).reduce((sum, item) => sum + item.total, 0);
+    const people = Array.from(grouped.entries())
+      .map(([name, values], index) => ({
+        name,
+        total: values.total,
+        payments: values.payments,
+        percentage: total > 0 ? (values.total / total) * 100 : 0,
+        color: PERSON_COLORS[index % PERSON_COLORS.length],
+      }))
+      .sort((a, b) => b.total - a.total)
+      .map((item, index) => ({
+        ...item,
+        color: PERSON_COLORS[index % PERSON_COLORS.length],
+      }));
+
+    return { people, total, leader: people[0] || null };
+  }, [history, currentMonth, spendingPeriod]);
 
 
   const activeIncomes = useMemo(() => {
@@ -846,6 +916,129 @@ const Dashboard: React.FC<DashboardProps> = ({
             <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
               Todavía no hay pagos registrados en estos meses.
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50">
+        <CardHeader className="gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div>
+            <CardTitle className="text-lg font-black text-slate-900">¿Quién gasta más en la casa?</CardTitle>
+            <CardDescription className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+              Distribución de pagos reales por responsable
+            </CardDescription>
+          </div>
+          <Select value={spendingPeriod} onValueChange={(value) => setSpendingPeriod(value as SpendingPeriod)}>
+            <SelectTrigger className="w-full rounded-xl border-slate-200 bg-slate-50 font-bold md:w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Este mes</SelectItem>
+              <SelectItem value="previous">Mes anterior</SelectItem>
+              <SelectItem value="last3">Últimos 3 meses</SelectItem>
+              <SelectItem value="all">Todo el historial</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+
+        <CardContent className="space-y-6 px-4 pb-6 md:px-6">
+          {spendingByPerson.leader ? (
+            <>
+              <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-100">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-100">Quien más gastó</p>
+                <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-2xl font-black tracking-tight">{spendingByPerson.leader.name}</p>
+                    <p className="text-3xl font-black tabular-nums">
+                      ${spendingByPerson.leader.total.toLocaleString('es-AR')}
+                    </p>
+                  </div>
+                  <p className="text-sm font-black">
+                    {spendingByPerson.leader.percentage.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% del total
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-5">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-3 lg:col-span-3">
+                  <p className="px-2 pt-1 text-xs font-black uppercase tracking-widest text-slate-500">Total por persona</p>
+                  <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={spendingByPerson.people.map(person => ({
+                          ...person,
+                          amountLabel: `$${person.total.toLocaleString('es-AR')} · ${person.percentage.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`,
+                        }))}
+                        layout="vertical"
+                        margin={{ top: 12, right: 118, bottom: 8, left: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                        <ChartTooltip />
+                        <Bar dataKey="total" radius={[0, 8, 8, 0]}>
+                          {spendingByPerson.people.map(person => <Cell key={person.name} fill={person.color} />)}
+                          <LabelList dataKey="amountLabel" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#475569' }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-3 lg:col-span-2">
+                  <p className="px-2 pt-1 text-xs font-black uppercase tracking-widest text-slate-500">Distribución porcentual</p>
+                  <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={spendingByPerson.people}
+                          dataKey="total"
+                          nameKey="name"
+                          innerRadius="52%"
+                          outerRadius="82%"
+                          paddingAngle={2}
+                        >
+                          {spendingByPerson.people.map(person => <Cell key={person.name} fill={person.color} />)}
+                        </Pie>
+                        <ChartTooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Persona</th>
+                      <th className="px-4 py-3 text-right">Cantidad de pagos</th>
+                      <th className="px-4 py-3 text-right">Total gastado</th>
+                      <th className="px-4 py-3 text-right">Porcentaje</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {spendingByPerson.people.map(person => (
+                      <tr key={person.name} className="border-t border-slate-100">
+                        <td className="px-4 py-3 font-black text-slate-800">
+                          <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: person.color }} />
+                          {person.name}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-slate-500">{person.payments}</td>
+                        <td className="px-4 py-3 text-right font-black text-slate-900">${person.total.toLocaleString('es-AR')}</td>
+                        <td className="px-4 py-3 text-right font-black text-indigo-600">
+                          {person.percentage.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl bg-slate-50 py-12 text-center text-sm font-bold text-slate-400">
+              No hay pagos registrados para este período.
+            </div>
           )}
         </CardContent>
       </Card>
