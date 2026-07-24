@@ -45,6 +45,7 @@ const getEstadoPagoReal = (
   history?: GastoPagoHistorial[],
   currentMonth?: Date
 ): PaymentStatus => {
+  if (expense.origen === 'Vehículo') return 'Pagado';
   const montoExigible = getMontoExigible(expense, currentMonth);
 
   if (history && currentMonth) {
@@ -72,6 +73,7 @@ const getPaidThisPeriod = (
   history?: GastoPagoHistorial[],
   currentMonth?: Date
 ): number => {
+  if (expense.origen === 'Vehículo') return expense.monto;
   if (!history || !currentMonth) {
     return expense.total_abonado ?? 0;
   }
@@ -387,6 +389,15 @@ const estadoPagoReal =
                       <div className="font-bold text-slate-900 text-[15px] leading-tight mb-1">
                         {e.subcategoria}
                       </div>
+                      {e.origen === 'Vehículo' && (
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[9px] font-black uppercase tracking-wider">
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-600">Origen: Vehículo</span>
+                          <span className="text-slate-400">{e.vehiculo_nombre}</span>
+                        </div>
+                      )}
+                      {e.origen === 'Vehículo' && e.concepto && e.concepto !== e.subcategoria && (
+                        <div className="mb-1 text-[10px] italic text-slate-400">{e.concepto}</div>
+                      )}
 
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5 opacity-80">
@@ -426,7 +437,7 @@ const estadoPagoReal =
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={updatingPaymentIds.has(e.id)}
+                          disabled={e.origen === 'Vehículo' || updatingPaymentIds.has(e.id)}
                           onClick={() => {
                             if (estadoPagoReal === 'Pendiente' || estadoPagoReal === 'Parcial') {
                               onActionPayment(e);
@@ -443,7 +454,7 @@ const estadoPagoReal =
                               ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
                               : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
                           }`}
-                          title={estadoPagoReal === 'Pagado' ? 'Marcar como Pendiente' : 'Registrar Pago'}
+                          title={e.origen === 'Vehículo' ? 'Registrado desde vehículos' : estadoPagoReal === 'Pagado' ? 'Marcar como Pendiente' : 'Registrar Pago'}
                         >
                           <span className="flex items-center gap-1.5">
                             {updatingPaymentIds.has(e.id) ? (
@@ -460,7 +471,7 @@ const estadoPagoReal =
                               {updatingPaymentIds.has(e.id)
                                 ? '...'
                                 : estadoPagoReal === 'Pagado'
-                                ? 'Pagado'
+                                ? (e.origen === 'Vehículo' ? 'Registrado' : 'Pagado')
                                 : estadoPagoReal === 'Parcial'
                                 ? 'Abonar'
                                 : 'Pagar'}
@@ -522,15 +533,17 @@ const estadoPagoReal =
 
                     <TableCell className="text-right py-4">
                       <div className="flex justify-end gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all rounded-lg"
-                          title="Ver Historial"
-                          onClick={() => onShowHistory(e)}
-                        >
-                          <HistoryIcon className="w-3.5 h-3.5" />
-                        </Button>
+                        {e.origen !== 'Vehículo' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all rounded-lg"
+                            title="Ver Historial"
+                            onClick={() => onShowHistory(e)}
+                          >
+                            <HistoryIcon className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
 
                         <Button
                           variant="ghost"

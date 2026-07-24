@@ -74,6 +74,10 @@ export interface Expense {
   cuota_actual?: number;
   fecha_inicio_cuotas?: string;
   monto_cuota?: number;
+  origen?: 'Vehículo';
+  movimiento_origen_id?: string;
+  vehiculo_id?: string;
+  vehiculo_nombre?: string;
 }
 
 export interface GastoPagoHistorial {

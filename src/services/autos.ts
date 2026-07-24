@@ -54,6 +54,19 @@ export const autosService = {
     return (data as AutoMovimiento[]) || [];
   },
 
+  async obtenerTodosLosMovimientos(): Promise<AutoMovimiento[]> {
+    const { data, error } = await supabase
+      .from('auto_movimientos')
+      .select('*')
+      .order('fecha', { ascending: false });
+
+    if (error) {
+      throw new Error(`Error al obtener todos los movimientos de autos: ${error.message}`);
+    }
+
+    return (data as AutoMovimiento[]) || [];
+  },
+
   async crearMovimiento(movimiento: AutoMovimientoInput): Promise<AutoMovimiento> {
     const { data, error } = await supabase
       .from('auto_movimientos')
@@ -63,6 +76,24 @@ export const autosService = {
 
     if (error) {
       throw new Error(`Error al crear movimiento del auto: ${error.message}`);
+    }
+
+    return data as AutoMovimiento;
+  },
+
+  async actualizarMovimiento(
+    id: string,
+    actualizacion: Partial<AutoMovimientoInput>
+  ): Promise<AutoMovimiento> {
+    const { data, error } = await supabase
+      .from('auto_movimientos')
+      .update(actualizacion)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Error al actualizar movimiento del auto: ${error.message}`);
     }
 
     return data as AutoMovimiento;

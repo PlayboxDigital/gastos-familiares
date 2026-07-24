@@ -30,6 +30,7 @@ import { presupuestosService } from './services/presupuestos';
 import { gastosPagosHistorialService } from './services/gastosPagosHistorial';
 import { deudasService } from './services/deudas';
 import { incomesService } from './services/Clientes';
+import { autosService } from './services/autos';
 import { Button } from '@/components/ui/button';
 import { DebtList } from './components/DebtList';
 import { DebtForm } from './components/DebtForm';
@@ -92,6 +93,7 @@ export default function App() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomePayments, setIncomePayments] = useState<IngresoPago[]>([]);
+  const [vehicleExpenses, setVehicleExpenses] = useState<Expense[]>([]);
   const [expenseFormDefaultTipo, setExpenseFormDefaultTipo] = useState<'fijo' | 'variable'>('fijo');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -242,6 +244,40 @@ export default function App() {
     sessionStorage.setItem('pwa-banner-hide', '1');
   };
 
+  const fetchVehicleExpenses = React.useCallback(async () => {
+    const [autos, movimientos] = await Promise.all([
+      autosService.obtenerAutos(),
+      autosService.obtenerTodosLosMovimientos(),
+    ]);
+    const autoNames = new Map(autos.map(auto => [auto.id, auto.nombre]));
+    const uniqueByOrigin = new Map<string, Expense>();
+
+    movimientos.forEach(movimiento => {
+      const originId = movimiento.id;
+      uniqueByOrigin.set(originId, {
+        id: `vehiculo:${originId}`,
+        fecha: movimiento.fecha,
+        monto: Number(movimiento.monto) || 0,
+        total_abonado: Number(movimiento.monto) || 0,
+        categoria: movimiento.categoria,
+        subcategoria: movimiento.concepto,
+        concepto: movimiento.observaciones || movimiento.concepto,
+        responsable: 'Vehículo',
+        prioridad: 'Importante',
+        tipo: 'Variable',
+        tipo_gasto: 'variable',
+        estado_pago: 'Pagado',
+        servicio_clave: `vehiculo:${originId}`,
+        origen: 'Vehículo',
+        movimiento_origen_id: originId,
+        vehiculo_id: movimiento.auto_id,
+        vehiculo_nombre: autoNames.get(movimiento.auto_id) || 'Vehículo',
+      });
+    });
+
+    setVehicleExpenses(Array.from(uniqueByOrigin.values()));
+  }, []);
+
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -255,7 +291,8 @@ export default function App() {
         historial,
         deudas,
         ingresos,
-        ingresosPagos
+        ingresosPagos,
+        _vehicleExpenses
       ] = await Promise.all([
         gastosService.obtenerGastos(),
         presupuestosService.obtenerPresupuestos(),
@@ -263,6 +300,7 @@ export default function App() {
         deudasService.obtenerDeudas(),
         incomesService.obtenerIngresos(),
         incomesService.obtenerTodosLosPagos(),
+        fetchVehicleExpenses(),
       ]);
 
       setExpenses(gastos);
@@ -277,7 +315,17 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [fetchVehicleExpenses]);
+
+  useEffect(() => {
+    const refreshVehicleExpenses = () => {
+      fetchVehicleExpenses().catch(error => {
+        console.error('Error al refrescar gastos de vehículos:', error);
+      });
+    };
+    window.addEventListener('vehicle-movements-changed', refreshVehicleExpenses);
+    return () => window.removeEventListener('vehicle-movements-changed', refreshVehicleExpenses);
+  }, [fetchVehicleExpenses]);
 
   const handleMigrateData = async () => {
     const saved = localStorage.getItem('getagasto_expenses');
@@ -484,6 +532,10 @@ export default function App() {
   };
 
   const handleEditExpense = (expense: Expense) => {
+    if (expense.origen === 'Vehículo') {
+      setActiveTab('autos');
+      return;
+    }
     setExpenseToEdit(expense);
     setIsFormOpen(true);
   };
@@ -824,9 +876,13 @@ export default function App() {
     const expenseDate = parseISO(String(rawDate).slice(0, 10));
     return isSameMonth(expenseDate, currentMonth);
   });
+  const vehicleExpensesThisMonth = vehicleExpenses.filter(e =>
+    isSameMonth(parseISO(e.fecha), currentMonth)
+  );
+  const generalVariableExpenses = [...variableExpenses, ...vehicleExpensesThisMonth];
 
   const totalFijos = fixedExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0);
-  const totalVariables = variableExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0);
+  const totalVariables = generalVariableExpenses.reduce((sum, e) => sum + getMontoExigible(e, currentMonth), 0);
 
   return (
     <div className="space-y-8">
@@ -961,7 +1017,7 @@ export default function App() {
       <section>
         <h2 className="text-xl font-bold mb-4">Gastos variables del mes</h2>
         <ExpenseList
-          expenses={variableExpenses}
+          expenses={generalVariableExpenses}
           onEdit={handleEditExpense}
           onTogglePayment={handleTogglePayment}
           onShowHistory={handleShowHistory}
@@ -1022,7 +1078,10 @@ export default function App() {
       case 'monthly-expenses':
         return (
           <ExpenseList
-            expenses={expenses.filter(e => e.tipo === 'Variable' && isSameMonth(parseISO(e.fecha), currentMonth))}
+            expenses={[
+              ...expenses.filter(e => e.tipo === 'Variable' && isSameMonth(parseISO(e.fecha), currentMonth)),
+              ...vehicleExpenses.filter(e => isSameMonth(parseISO(e.fecha), currentMonth)),
+            ]}
             onEdit={handleEditExpense}
             onTogglePayment={handleTogglePayment}
             onShowHistory={handleShowHistory}
