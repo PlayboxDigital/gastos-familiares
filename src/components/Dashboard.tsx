@@ -28,6 +28,7 @@ import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento } from '../estadoVencimiento';
 import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
+import { MonthlyFinancialSummary } from '../utils/monthlyFinancialSummary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +55,7 @@ interface DashboardProps {
   incomePayments?: IngresoPago[];
   debts?: Debt[];
   history?: GastoPagoHistorial[];
+  financialSummary: MonthlyFinancialSummary;
   onQuickPayExpense?: (expense: Expense) => void;
   onTabChange?: (tab: string) => void;
   onSelectIncome?: (clientName: string) => void;
@@ -77,6 +79,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   incomePayments = [],
   debts = [],
   history = [],
+  financialSummary,
   onQuickPayExpense,
   onTabChange,
   onSelectIncome,
@@ -276,43 +279,22 @@ const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses]
   );
 
-  const paidDetailRows = useMemo(() => {
-    const seenIds = new Set<string>();
-    return monthlyExpenses.flatMap(expense => {
-      const montoExigible = getMontoExigible(expense as ExpenseWithCredit);
-      let remaining = montoExigible;
+  const monthlyFinancialSummary = financialSummary;
 
-      return history
-        .filter(payment => {
-          if (seenIds.has(payment.id) || payment.gasto_id !== expense.id) return false;
-          const period = getPaymentEffectivePeriod(payment);
-          return period?.year === currentMonth.getFullYear()
-            && period.month === currentMonth.getMonth() + 1;
-        })
-        .sort((a, b) => {
-          const dateA = new Date(a.fecha_pago || a.fecha_registro || a.created_at || 0).getTime();
-          const dateB = new Date(b.fecha_pago || b.fecha_registro || b.created_at || 0).getTime();
-          return dateA - dateB;
-        })
-        .map(payment => {
-          seenIds.add(payment.id);
-          const actualAmount = Number(payment.monto_pagado) || 0;
-          const amount = Math.min(actualAmount, Math.max(remaining, 0));
-          remaining = Math.max(0, remaining - amount);
-          return {
-            id: payment.id,
-            concept: payment.gasto_concepto_snapshot || expense.subcategoria || expense.concepto || expense.categoria,
-            person: payment.responsable_snapshot || expense.responsable || 'Sin responsable',
-            amount,
-            actualAmount,
-            date: payment.fecha_pago || payment.fecha_registro || payment.created_at,
-            paymentMethod: payment.forma_pago,
-            status: remaining === 0 ? 'Completo' : 'Parcial',
-          };
-        })
-        .filter(row => row.amount > 0);
-    });
-  }, [monthlyExpenses, history, currentMonth]);
+  const paidDetailRows = useMemo(
+    () =>
+      monthlyFinancialSummary.movimientos.map((movement) => ({
+        id: movement.id,
+        concept: movement.concept,
+        person: movement.responsible,
+        amount: movement.amount,
+        date: movement.date,
+        paymentMethod: movement.paymentMethod,
+        status: movement.paymentStatus,
+        source: movement.source,
+      })),
+    [monthlyFinancialSummary]
+  );
 
   const pendingDetailRows = useMemo(
     () => monthlyExpenses
@@ -367,10 +349,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     [monthlyExpenses, history, currentMonth]
   );
 
-  const totalPagado = useMemo(
-    () => paidDetailRows.reduce((sum, row) => sum + row.amount, 0),
-    [paidDetailRows]
-  );
+  const totalPagado = monthlyFinancialSummary.totalGastado;
 
   const totalPendiente = useMemo(
     () => pendingDetailRows.reduce((sum, row) => sum + row.pending, 0),
@@ -886,31 +865,52 @@ const Dashboard: React.FC<DashboardProps> = ({
             )}
 
             {activeKpiDetail === 'paid' && (
-              <KpiDetailSection
-                isEmpty={paidDetailRows.length === 0}
-                footerLabel="Total pagado este mes"
-                footerValue={totalPagado}
-              >
-                {paidDetailRows.map(row => {
-                  const paymentDate = row.date ? new Date(row.date) : null;
-                  return (
-                    <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="truncate font-black text-slate-900">{row.concept}</p>
-                          <p className="mt-1 text-xs font-bold text-slate-500">{row.person}</p>
-                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
-                            <span className={row.status === 'Completo' ? 'text-emerald-600' : 'text-amber-600'}>{row.status}</span>
-                            {paymentDate && isValid(paymentDate) && <span className="text-slate-400">{format(paymentDate, 'dd MMM yyyy', { locale: es })}</span>}
-                            {row.paymentMethod && <span className="text-slate-400">{row.paymentMethod}</span>}
-                          </div>
-                        </div>
-                        <p className="shrink-0 font-black tabular-nums text-indigo-600">${row.amount.toLocaleString('es-AR')}</p>
-                      </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  {[
+                    ['Fijos', monthlyFinancialSummary.subtotalFijos],
+                    ['Variables comunes', monthlyFinancialSummary.subtotalVariablesComunes],
+                    ['Vehículos', monthlyFinancialSummary.subtotalVehiculos],
+                    ['Tickets', monthlyFinancialSummary.subtotalTickets],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-2xl border border-slate-100 bg-white p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+                      <p className="mt-1 text-sm font-black text-slate-900">
+                        ${Number(value).toLocaleString('es-AR')}
+                      </p>
                     </div>
-                  );
-                })}
-              </KpiDetailSection>
+                  ))}
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                  {format(currentMonth, 'MMMM yyyy', { locale: es })} · {paidDetailRows.length} movimientos
+                </p>
+                <KpiDetailSection
+                  isEmpty={paidDetailRows.length === 0}
+                  footerLabel="Total pagado este mes"
+                  footerValue={totalPagado}
+                >
+                  {paidDetailRows.map(row => {
+                    const paymentDate = row.date ? new Date(row.date) : null;
+                    return (
+                      <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="truncate font-black text-slate-900">{row.concept}</p>
+                            <p className="mt-1 text-xs font-bold text-slate-500">{row.person}</p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
+                              <span className={row.status === 'Completo' ? 'text-emerald-600' : 'text-amber-600'}>{row.status}</span>
+                              <span className="text-slate-400">{row.source}</span>
+                              {paymentDate && isValid(paymentDate) && <span className="text-slate-400">{format(paymentDate, 'dd MMM yyyy', { locale: es })}</span>}
+                              {row.paymentMethod && <span className="text-slate-400">{row.paymentMethod}</span>}
+                            </div>
+                          </div>
+                          <p className="shrink-0 font-black tabular-nums text-indigo-600">${row.amount.toLocaleString('es-AR')}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </KpiDetailSection>
+              </div>
             )}
 
             {activeKpiDetail === 'pending' && (

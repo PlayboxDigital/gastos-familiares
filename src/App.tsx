@@ -22,6 +22,7 @@ import {
   Income,
   IncomeInput,
   IngresoPago,
+  TicketCompra,
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
@@ -41,7 +42,11 @@ import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
 import { ExpenseList } from './components/ExpenseList';
 import { ConsumoInteligente } from './components/ConsumoInteligente';
+import { TicketScanner } from './components/TicketScanner';
+import { MonthlyStatus } from './components/MonthlyStatus';
+import { ticketsService } from './services/tickets';
 import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense } from './utils/expenseLogic';
+import { getMonthlyFinancialSummary } from './utils/monthlyFinancialSummary';
 
 import {
   Plus,
@@ -61,7 +66,8 @@ import {
   Trash2,
   Users,
   DollarSign,
-  Zap
+  Zap,
+  ScanLine
 } from 'lucide-react';
 import {
   Dialog,
@@ -94,6 +100,7 @@ export default function App() {
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [incomePayments, setIncomePayments] = useState<IngresoPago[]>([]);
   const [vehicleExpenses, setVehicleExpenses] = useState<Expense[]>([]);
+  const [confirmedTickets, setConfirmedTickets] = useState<TicketCompra[]>([]);
   const [expenseFormDefaultTipo, setExpenseFormDefaultTipo] = useState<'fijo' | 'variable'>('fijo');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -109,6 +116,13 @@ export default function App() {
   const [incomePaymentFilter, setIncomePaymentFilter] = useState<'all' | 'debtors' | 'paid'>('all');
 
   const currentMonth = new Date();
+  const dashboardFinancialSummary = getMonthlyFinancialSummary({
+    expenses,
+    vehicleExpenses,
+    tickets: confirmedTickets,
+    history: globalHistory,
+    targetMonth: currentMonth,
+  });
 
   // Sincronizar búsqueda cuando se cambia de pestaña manual
   useEffect(() => {
@@ -278,8 +292,8 @@ export default function App() {
     setVehicleExpenses(Array.from(uniqueByOrigin.values()));
   }, []);
 
-  const fetchData = React.useCallback(async () => {
-    setIsLoading(true);
+  const fetchData = React.useCallback(async (options?: { throwOnError?: boolean; silent?: boolean }) => {
+    if (!options?.silent) setIsLoading(true);
     setError(null);
     try {
       console.log("APP_GASTOS_1_ANTES_FETCH")
@@ -292,7 +306,8 @@ export default function App() {
         deudas,
         ingresos,
         ingresosPagos,
-        _vehicleExpenses
+        _vehicleExpenses,
+        tickets
       ] = await Promise.all([
         gastosService.obtenerGastos(),
         presupuestosService.obtenerPresupuestos(),
@@ -301,6 +316,7 @@ export default function App() {
         incomesService.obtenerIngresos(),
         incomesService.obtenerTodosLosPagos(),
         fetchVehicleExpenses(),
+        ticketsService.obtenerTicketsConfirmados(),
       ]);
 
       setExpenses(gastos);
@@ -309,11 +325,13 @@ export default function App() {
       setDebts(deudas);
       setIncomes(ingresos);
       setIncomePayments(ingresosPagos);
+      setConfirmedTickets(tickets);
     } catch (e: any) {
       console.error("APP_GASTOS_ERROR_EN_FETCH_O_SETSTATE:", e)
       setError(`Error al cargar datos: ${e.message}`);
+      if (options?.throwOnError) throw e;
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) setIsLoading(false);
     }
   }, [fetchVehicleExpenses]);
 
@@ -823,6 +841,13 @@ export default function App() {
     console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
     
     switch (activeTab) {
+       case 'tickets':
+  return (
+    <TicketScanner
+      onBackToDashboard={() => setActiveTab('dashboard')}
+      onConfirmed={() => fetchData({ throwOnError: true, silent: true })}
+    />
+  );
        case 'dashboard':
   return (
     <div className="space-y-4">
@@ -847,6 +872,7 @@ export default function App() {
         incomePayments={incomePayments}
         debts={debts}
         history={globalHistory}
+        financialSummary={dashboardFinancialSummary}
         onQuickPayExpense={handleActionPayment}
         onTabChange={setActiveTab}
         onSelectIncome={(name) => {
@@ -862,7 +888,21 @@ export default function App() {
       />
     </div>
   );
-     case 'monthly-status': {
+     case 'monthly-status':
+       return (
+         <MonthlyStatus
+           expenses={expenses}
+           vehicleExpenses={vehicleExpenses}
+           tickets={confirmedTickets}
+           history={globalHistory}
+           currentMonth={currentMonth}
+           updatingPaymentIds={updatingPaymentIds}
+           onEdit={handleEditExpense}
+           onPay={handleActionPayment}
+           onHistory={handleShowHistory}
+         />
+       );
+     case 'monthly-status-legacy': {
   const fixedExpenses = expenses.filter(e =>
     e.tipo === 'Fijo' && e.archived !== true && isExpenseApplicableInMonth(e, currentMonth)
   );
@@ -1100,6 +1140,7 @@ export default function App() {
             incomePayments={incomePayments}
             debts={debts}
             history={globalHistory}
+            financialSummary={dashboardFinancialSummary}
             onQuickPayExpense={handleActionPayment}
             onTabChange={setActiveTab}
             onSelectIncome={(name) => {
@@ -1185,6 +1226,12 @@ export default function App() {
             label="Consumo Inteligente"
           />
           <SidebarLink
+            active={activeTab === 'tickets'}
+            onClick={() => setActiveTab('tickets')}
+            icon={<ScanLine className="w-5 h-5" />}
+            label="Escanear ticket"
+          />
+          <SidebarLink
             active={activeTab === 'settings'}
             onClick={() => setActiveTab('settings')}
             icon={<SettingsIcon className="w-5 h-5" />}
@@ -1237,8 +1284,12 @@ export default function App() {
                 ? 'CLM - Prospectos'
                 : activeTab === 'monthly-expenses'
                 ? 'Gastos del Mes'
+                : activeTab === 'monthly-status'
+                ? 'Estado Mensual'
                 : activeTab === 'consumo-inteligente'
                 ? 'Consumo Inteligente'
+                : activeTab === 'tickets'
+                ? 'Cargar ticket'
                 : 'Configuración'}
             </h2>
           </div>
@@ -1256,7 +1307,7 @@ export default function App() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             </Button>
-            {activeTab !== 'clm' && activeTab !== 'monthly-expenses' && activeTab !== 'autos' && (
+            {activeTab !== 'clm' && activeTab !== 'monthly-expenses' && activeTab !== 'autos' && activeTab !== 'tickets' && (
               <Button
                 onClick={() => {
                   if (activeTab === 'debts') {
@@ -1386,6 +1437,7 @@ export default function App() {
                     incomePayments={incomePayments}
                     debts={debts}
                     history={globalHistory}
+                    financialSummary={dashboardFinancialSummary}
                     onQuickPayExpense={handleActionPayment}
                     onTabChange={setActiveTab}
                     onSelectIncome={(name) => {
@@ -1462,6 +1514,12 @@ export default function App() {
           onClick={() => setActiveTab('consumo-inteligente')}
           icon={<Zap className="w-5 h-5" />}
           label="Consumo"
+        />
+        <MobileNavLink
+          active={activeTab === 'tickets'}
+          onClick={() => setActiveTab('tickets')}
+          icon={<ScanLine className="w-5 h-5" />}
+          label="Ticket"
         />
         <MobileNavLink
           active={activeTab === 'settings'}
