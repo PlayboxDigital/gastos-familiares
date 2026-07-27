@@ -122,6 +122,68 @@ export type GastoPagoHistorialInput = Omit<GastoPagoHistorial, 'id' | 'created_a
 
 export type ExpenseInput = Omit<Expense, 'id' | 'created_at'>;
 
+export interface TicketCompra {
+  id: string;
+  comercio?: string;
+  fecha_compra: string;
+  numero_ticket?: string;
+  responsable: string;
+  categoria: string;
+  subcategoria?: string;
+  prioridad: Priority;
+  forma_pago: string;
+  subtotal: number;
+  descuento_total: number;
+  total: number;
+  observaciones?: string;
+  imagen_nombre_original?: string;
+  imagen_cloudinary_public_id?: string;
+  imagen_cloudinary_url?: string;
+  imagen_cloudinary_secure_url?: string;
+  imagen_hash?: string;
+  estado_revision?: string;
+  texto_extraido?: string;
+  confianza_lectura?: number;
+  gasto_id?: string;
+  pago_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TicketCompraInput = Omit<
+  TicketCompra,
+  'id' | 'gasto_id' | 'pago_id' | 'created_at' | 'updated_at'
+>;
+
+export interface TicketConfirmacionResultado {
+  ticket_id: string;
+  gasto_id: string;
+  pago_id: string;
+  total: number;
+  diferencia: number;
+}
+
+export interface TicketProducto {
+  id: string;
+  ticket_id: string;
+  descripcion_original: string;
+  cantidad: number;
+  unidad: string;
+  precio_unitario: number;
+  subtotal: number;
+  descuento: number;
+  categoria: string;
+  subcategoria?: string;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TicketProductoInput = Omit<
+  TicketProducto,
+  'id' | 'created_at' | 'updated_at'
+>;
+
 export interface CategoryConfig {
   id?: string;
   categoria: string;
