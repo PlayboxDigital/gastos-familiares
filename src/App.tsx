@@ -26,7 +26,6 @@ import {
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
-import { supabase } from './lib/supabase';
 import { presupuestosService } from './services/presupuestos';
 import { gastosPagosHistorialService } from './services/gastosPagosHistorial';
 import { deudasService } from './services/deudas';
@@ -47,6 +46,7 @@ import { MonthlyStatus } from './components/MonthlyStatus';
 import { ticketsService } from './services/tickets';
 import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense } from './utils/expenseLogic';
 import { getMonthlyFinancialSummary } from './utils/monthlyFinancialSummary';
+import { useAuth } from './hooks/useAuth';
 
 import {
   Plus,
@@ -93,6 +93,8 @@ const getEstadoPagoReal = (
 };
 
 export default function App() {
+  const { signOut, familiaNombre, user } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [globalHistory, setGlobalHistory] = useState<GastoPagoHistorial[]>([]);
@@ -837,6 +839,22 @@ export default function App() {
     }
   };
 
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setError(null);
+    try {
+      await signOut();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'No se pudo cerrar la sesión. Intentá nuevamente.'
+      );
+      setIsSigningOut(false);
+    }
+  };
+
   const renderContent = () => {
     console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
     
@@ -1170,7 +1188,7 @@ export default function App() {
               Gastos Familiares
             </h1>
             <p className="text-[10px] font-medium text-slate-500 leading-none mt-1">
-              Familia Ayestarán
+              {familiaNombre || 'Familia Ayestaran'}
             </p>
           </div>
         </div>
@@ -1242,11 +1260,11 @@ export default function App() {
         <div className="mt-auto pt-6 border-t border-slate-100">
           <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 mb-3">
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-[10px]">
-              FA
+              {(user?.email || 'US').slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] font-semibold text-slate-900 truncate">
-                Familia Ayestarán
+                {user?.email || 'Usuario autenticado'}
               </p>
               <p className="text-[9px] font-medium text-slate-400 tracking-wider">
                 Plan Premium
@@ -1255,10 +1273,12 @@ export default function App() {
           </div>
           <Button
             variant="ghost"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
             className="w-full justify-start text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl"
           >
             <LogOut className="w-5 h-5 mr-3" />
-            Salir
+            {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
           </Button>
         </div>
       </aside>
@@ -1306,6 +1326,18 @@ export default function App() {
             <Button variant="ghost" size="icon" className="rounded-full text-slate-400 relative">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 md:hidden"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-5 w-5" />
             </Button>
             {activeTab !== 'clm' && activeTab !== 'monthly-expenses' && activeTab !== 'autos' && activeTab !== 'tickets' && (
               <Button

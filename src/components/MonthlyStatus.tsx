@@ -21,11 +21,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -578,16 +575,47 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
         </ChartCard>
 
         <ChartCard title="Distribución por responsable" description="Participación sobre el gasto abonado">
-          <div className="grid items-center gap-3 sm:grid-cols-[1fr_1.1fr]">
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={responsibleData} dataKey="amount" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>
-                  {responsibleData.map((item, index) => <Cell key={item.name} fill={COLORS[index % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(value: number) => money.format(value)} />
-              </PieChart>
-            </ResponsiveContainer>
-            <ChartLegend data={responsibleData} />
+          <div className="flex min-h-[330px] flex-col justify-center gap-5">
+            {responsibleData.map((item, index) => (
+              <div key={item.name} className="space-y-2.5">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                  <div className="min-w-0">
+                    <p className="break-words text-base font-black leading-tight text-slate-900">
+                      {item.name}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {item.count} {item.count === 1 ? 'gasto' : 'gastos'}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-baseline gap-2 sm:text-right">
+                    <span className="text-lg font-black tabular-nums text-slate-950">
+                      {money.format(item.amount)}
+                    </span>
+                    <span className="min-w-12 text-sm font-black tabular-nums text-indigo-700">
+                      {item.percentage.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className="h-3 overflow-hidden rounded-full bg-slate-100"
+                  role="img"
+                  aria-label={`${item.name}: ${item.percentage.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% del gasto abonado`}
+                >
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{
+                      width: `${Math.min(100, item.percentage)}%`,
+                      backgroundColor: COLORS[index % COLORS.length],
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            {responsibleData.length === 0 && (
+              <p className="py-12 text-center text-sm font-semibold text-slate-400">
+                No hay pagos registrados para este período.
+              </p>
+            )}
           </div>
         </ChartCard>
       </div>

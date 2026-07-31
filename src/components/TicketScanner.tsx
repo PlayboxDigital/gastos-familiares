@@ -26,9 +26,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  TicketAnalysisState,
+  TicketAnalysisStatus,
+} from './tickets/TicketAnalysisStatus';
+import { TicketExtractionWarnings } from './tickets/TicketExtractionWarnings';
 import { CATEGORIES, DB_PAYMENT_METHOD_MAP, PAYMENT_METHODS, PRIORITIES, RESPONSIBLES } from '../constants';
 import { cloudinaryService } from '../services/cloudinary';
+import { ticketOcrService } from '../services/ticketOcr';
 import { ticketsService } from '../services/tickets';
+import { TicketExtraction } from '../schemas/ticketExtraction';
+import {
+  INACTIVE_SESSION_MESSAGE,
+  requireActiveSession,
+  supabase,
+} from '../lib/supabase';
 import { Priority, TicketCompraInput, TicketConfirmacionResultado } from '../types';
 
 type Step = 'capture' | 'products' | 'review' | 'success';
@@ -84,9 +96,15 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
   const [previewUrl, setPreviewUrl] = useState('');
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [savedImageUrl, setSavedImageUrl] = useState('');
+  const [analysisImageUrl, setAnalysisImageUrl] = useState('');
+  const [extraction, setExtraction] = useState<TicketExtraction | null>(null);
+  const [analysisState, setAnalysisState] = useState<TicketAnalysisState>('idle');
+  const [analysisError, setAnalysisError] = useState('');
   const [products, setProducts] = useState<EditableProduct[]>([]);
   const [editingProduct, setEditingProduct] = useState<EditableProduct>(createEmptyProduct(1));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [isAuthRestoring, setIsAuthRestoring] = useState(true);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmationResult, setConfirmationResult] =
@@ -94,10 +112,14 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
   const [error, setError] = useState('');
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const analysisInFlightRef = useRef(false);
+  const draftInFlightRef = useRef(false);
 
   const [form, setForm] = useState({
     comercio: '',
     fecha_compra: format(new Date(), 'yyyy-MM-dd'),
+    hora: '',
+    cuit: '',
     numero_ticket: '',
     responsable: RESPONSIBLES[0] || '',
     categoria: CATEGORIES[0]?.categoria || '',
@@ -106,9 +128,39 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
     forma_pago: PAYMENT_METHODS[0] || '',
     subtotal: 0,
     descuento_total: 0,
+    iva: 0,
     total: 0,
     observaciones: '',
   });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const restoreSession = async () => {
+      try {
+        await requireActiveSession();
+        if (mounted) setHasActiveSession(true);
+      } catch {
+        if (mounted) setHasActiveSession(false);
+      } finally {
+        if (mounted) setIsAuthRestoring(false);
+      }
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setHasActiveSession(Boolean(session));
+      setIsAuthRestoring(false);
+    });
+
+    void restoreSession();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -135,8 +187,8 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
   const handleFile = (file?: File) => {
     if (!file) return;
     setError('');
-    if (!file.type.startsWith('image/')) {
-      setError('Seleccioná una imagen válida.');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Seleccioná una imagen JPG, JPEG, PNG o WEBP.');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -144,10 +196,19 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
       return;
     }
     setSelectedFile(file);
+    setExtraction(null);
+    setAnalysisState('idle');
+    setAnalysisError('');
+  };
+
+  const validateDraftImage = () => {
+    if (!selectedFile && !savedImageUrl) return 'Seleccioná o tomá una foto del ticket.';
+    return '';
   };
 
   const validateTicket = () => {
-    if (!selectedFile && !savedImageUrl) return 'Seleccioná o tomá una foto del ticket.';
+    const imageError = validateDraftImage();
+    if (imageError) return imageError;
     if (!form.fecha_compra) return 'La fecha de compra es obligatoria.';
     if (!form.responsable) return 'El responsable es obligatorio.';
     if (!form.categoria) return 'La categoría es obligatoria.';
@@ -159,6 +220,15 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
       return 'El subtotal y el descuento no pueden ser negativos.';
     }
     return '';
+  };
+
+  const storedObservations = () => {
+    const detectedDetails = [
+      form.cuit.trim() ? `CUIT: ${form.cuit.trim()}` : '',
+      form.hora.trim() ? `Hora: ${form.hora.trim()}` : '',
+      Number(form.iva) > 0 ? `IVA discriminado: ${Number(form.iva).toLocaleString('es-AR')}` : '',
+    ].filter(Boolean);
+    return [...detectedDetails, form.observaciones.trim()].filter(Boolean).join('\n');
   };
 
   const ticketPayload = (
@@ -180,7 +250,9 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
     subtotal: Number(form.subtotal),
     descuento_total: Number(form.descuento_total),
     total: Number(form.total),
-    observaciones: form.observaciones.trim() || undefined,
+    observaciones: storedObservations() || undefined,
+    texto_extraido: extraction?.texto_completo || undefined,
+    confianza_lectura: extraction?.confianza_general ?? undefined,
     ...(image
       ? {
           imagen_nombre_original: image.originalName,
@@ -191,17 +263,129 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
       : {}),
   });
 
+  const applyExtraction = (detected: TicketExtraction) => {
+    const detectedPaymentMethod = detected.forma_pago
+      ? PAYMENT_METHODS.find((method) => {
+          const known = method.toLocaleLowerCase('es');
+          const detectedValue = detected.forma_pago!.toLocaleLowerCase('es');
+          return known === detectedValue || known.includes(detectedValue) || detectedValue.includes(known);
+        })
+      : undefined;
+
+    setForm((current) => ({
+      ...current,
+      comercio: detected.comercio ?? current.comercio,
+      fecha_compra: detected.fecha ?? current.fecha_compra,
+      hora: detected.hora ?? current.hora,
+      cuit: detected.cuit ?? current.cuit,
+      numero_ticket: detected.numero_comprobante ?? current.numero_ticket,
+      forma_pago: detectedPaymentMethod ?? current.forma_pago,
+      subtotal: detected.subtotal ?? current.subtotal,
+      descuento_total: detected.descuento ?? current.descuento_total,
+      iva: detected.iva ?? current.iva,
+      total: detected.total ?? current.total,
+      observaciones: detected.observaciones ?? current.observaciones,
+    }));
+
+    const validProducts = detected.productos
+      .filter(
+        (product) =>
+          product.descripcion.trim() &&
+          product.cantidad !== null &&
+          product.cantidad > 0 &&
+          product.subtotal !== null &&
+          product.subtotal >= 0
+      )
+      .map((product, index): EditableProduct => ({
+        localId: crypto.randomUUID(),
+        descripcion_original: product.descripcion.trim(),
+        cantidad: product.cantidad!,
+        unidad: product.unidad || 'unidad',
+        precio_unitario:
+          product.precio_unitario ??
+          Math.max(0, (product.subtotal! + (product.descuento ?? 0)) / product.cantidad!),
+        subtotal: product.subtotal!,
+        descuento: product.descuento ?? 0,
+        categoria: form.categoria,
+        subcategoria: '',
+        orden: index + 1,
+      }));
+
+    if (validProducts.length > 0) {
+      setProducts(validProducts);
+      setEditingProduct(createEmptyProduct(validProducts.length + 1));
+    }
+  };
+
+  const analyzeDraft = async (currentTicketId: string, imageUrl: string) => {
+    if (analysisInFlightRef.current) return;
+    analysisInFlightRef.current = true;
+    setAnalysisState('analyzing');
+    setAnalysisError('');
+    try {
+      const detected = await ticketOcrService.analyzeTicket(currentTicketId, imageUrl);
+      const discardedProducts = detected.productos.filter(
+        (product) =>
+          !product.descripcion.trim() ||
+          product.cantidad === null ||
+          product.cantidad <= 0 ||
+          product.subtotal === null ||
+          product.subtotal < 0
+      ).length;
+      const normalizedExtraction: TicketExtraction = discardedProducts
+        ? {
+            ...detected,
+            advertencias: Array.from(new Set([
+              ...detected.advertencias,
+              `${discardedProducts} producto(s) no se precargaron porque tenían cantidad o subtotal ilegible.`,
+            ])),
+          }
+        : detected;
+      setExtraction(normalizedExtraction);
+      applyExtraction(normalizedExtraction);
+      setAnalysisState('success');
+    } catch (cause) {
+      setAnalysisState('error');
+      setAnalysisError(
+        cause instanceof Error
+          ? cause.message
+          : 'No se pudo analizar el comprobante. Podés continuar manualmente.'
+      );
+    } finally {
+      analysisInFlightRef.current = false;
+    }
+  };
+
+  const retryAnalysis = () => {
+    if (!ticketId || !analysisImageUrl) {
+      setAnalysisError('No se encontró la imagen guardada para volver a analizar.');
+      return;
+    }
+    if (
+      products.length > 0 &&
+      !window.confirm(
+        'Volver a analizar reemplazará los productos precargados o editados actualmente. ¿Querés continuar?'
+      )
+    ) {
+      return;
+    }
+    void analyzeDraft(ticketId, analysisImageUrl);
+  };
+
   const createDraft = async () => {
-    const validationError = validateTicket();
+    const validationError = validateDraftImage();
     if (validationError) {
       setError(validationError);
       return;
     }
-    if (isSaving) return;
+    if (isAuthRestoring || draftInFlightRef.current || isSaving) return;
 
+    draftInFlightRef.current = true;
     setIsSaving(true);
     setError('');
     try {
+      await requireActiveSession();
+      setHasActiveSession(true);
       if (ticketId) {
         await ticketsService.actualizarTicket(ticketId, ticketPayload());
         setStep('products');
@@ -217,6 +401,7 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
       };
       const created = await ticketsService.crearTicket(ticketPayload(image));
       setTicketId(created.id);
+      setAnalysisImageUrl(uploaded.secure_url);
       setSavedImageUrl(
         cloudinaryService.getOptimizedUrl(uploaded.secure_url, {
           quality: 'auto:low',
@@ -224,10 +409,15 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
           width: 1200,
         })
       );
+      await analyzeDraft(created.id, uploaded.secure_url);
       setStep('products');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo crear el borrador del ticket.');
+      const message =
+        cause instanceof Error ? cause.message : 'No se pudo crear el borrador del ticket.';
+      if (message === INACTIVE_SESSION_MESSAGE) setHasActiveSession(false);
+      setError(message);
     } finally {
+      draftInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -431,13 +621,13 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">
-            Carga manual · sin OCR
+            Lectura inteligente · revisión obligatoria
           </p>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
             Escanear ticket
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Cargá la imagen, detallá los productos y revisá todo antes de confirmar.
+            Cargá una imagen, revisá la extracción automática y corregí lo necesario antes de confirmar.
           </p>
         </div>
         <div className="flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
@@ -468,6 +658,27 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
         </div>
       )}
 
+      {!isAuthRestoring && !hasActiveSession && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <p className="text-sm font-semibold">{INACTIVE_SESSION_MESSAGE}</p>
+        </div>
+      )}
+
+      <TicketAnalysisStatus
+        state={analysisState}
+        warnings={extraction?.advertencias}
+        error={analysisError}
+        onRetry={retryAnalysis}
+      />
+
+      {extraction && (
+        <TicketExtractionWarnings
+          warnings={extraction.advertencias}
+          doubtfulFields={extraction.campos_dudosos}
+        />
+      )}
+
       {step === 'capture' && (
         <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
           <Card className="overflow-hidden rounded-3xl border-slate-200">
@@ -480,7 +691,7 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
               <input
                 ref={cameraInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 capture="environment"
                 className="hidden"
                 onChange={(event) => handleFile(event.target.files?.[0])}
@@ -488,7 +699,7 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
               <input
                 ref={galleryInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={(event) => handleFile(event.target.files?.[0])}
               />
@@ -504,7 +715,7 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
                 <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                   <Receipt className="mb-3 h-12 w-12 text-slate-300" />
                   <p className="font-bold text-slate-700">Todavía no seleccionaste una imagen</p>
-                  <p className="mt-1 text-xs text-slate-400">JPG, PNG o imagen compatible · máximo 10 MB</p>
+                  <p className="mt-1 text-xs text-slate-400">JPG, JPEG, PNG o WEBP · máximo 10 MB</p>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -541,6 +752,12 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
                 <Field label="Fecha *">
                   <Input type="date" value={form.fecha_compra} onChange={(e) => setField('fecha_compra', e.target.value)} />
                 </Field>
+                <Field label="Hora detectada">
+                  <Input type="time" value={form.hora} onChange={(e) => setField('hora', e.target.value)} />
+                </Field>
+                <Field label="CUIT">
+                  <Input value={form.cuit} onChange={(e) => setField('cuit', e.target.value)} placeholder="Opcional" />
+                </Field>
                 <Field label="Número de ticket">
                   <Input value={form.numero_ticket} onChange={(e) => setField('numero_ticket', e.target.value)} placeholder="Opcional" />
                 </Field>
@@ -573,6 +790,7 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
                 </Field>
                 <MoneyField label="Subtotal" value={form.subtotal} onChange={(value) => setField('subtotal', value)} />
                 <MoneyField label="Descuento total" value={form.descuento_total} onChange={(value) => setField('descuento_total', value)} />
+                <MoneyField label="IVA discriminado" value={form.iva} onChange={(value) => setField('iva', value)} />
                 <div className="sm:col-span-2">
                   <MoneyField label="Total *" value={form.total} onChange={(value) => setField('total', value)} />
                 </div>
@@ -583,11 +801,28 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
               <Button
                 type="button"
                 onClick={createDraft}
-                disabled={isSaving}
+                disabled={
+                  isAuthRestoring ||
+                  !hasActiveSession ||
+                  isSaving ||
+                  analysisState === 'analyzing'
+                }
                 className="h-12 w-full rounded-xl bg-blue-600 font-black"
               >
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingBasket className="mr-2 h-4 w-4" />}
-                {isSaving ? 'Subiendo y guardando...' : 'Guardar borrador y cargar productos'}
+                {isAuthRestoring || isSaving || analysisState === 'analyzing'
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <ShoppingBasket className="mr-2 h-4 w-4" />}
+                {isAuthRestoring
+                  ? 'Restaurando sesión...'
+                  : !hasActiveSession
+                    ? 'Sesión requerida'
+                    : analysisState === 'analyzing'
+                  ? 'Analizando comprobante...'
+                  : isSaving
+                    ? 'Subiendo y guardando...'
+                    : ticketId
+                      ? 'Guardar cambios y cargar productos'
+                      : 'Subir y analizar ticket'}
               </Button>
             </CardContent>
           </Card>
@@ -701,10 +936,21 @@ export const TicketScanner: React.FC<TicketScannerProps> = ({
               <CardContent className="grid gap-4 p-6 sm:grid-cols-2">
                 <ReviewValue label="Comercio" value={form.comercio || 'Sin informar'} />
                 <ReviewValue label="Fecha" value={form.fecha_compra} />
+                <ReviewValue label="Hora" value={form.hora || 'Sin informar'} />
+                <ReviewValue label="CUIT" value={form.cuit || 'Sin informar'} />
                 <ReviewValue label="Responsable" value={form.responsable} />
                 <ReviewValue label="Forma de pago" value={form.forma_pago} />
                 <ReviewValue label="Categoría" value={`${form.categoria}${form.subcategoria ? ` · ${form.subcategoria}` : ''}`} />
                 <ReviewValue label="Ticket" value={form.numero_ticket || 'Sin número'} />
+                <ReviewValue label="IVA discriminado" value={currency.format(Number(form.iva))} />
+                <ReviewValue
+                  label="Confianza del análisis"
+                  value={
+                    extraction?.confianza_general !== null && extraction?.confianza_general !== undefined
+                      ? `${Math.round(extraction.confianza_general * 100)}%`
+                      : 'Sin informar'
+                  }
+                />
               </CardContent>
             </Card>
             <Card className="rounded-3xl border-slate-200">

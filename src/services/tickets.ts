@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { requireActiveSession, supabase } from '../lib/supabase';
 import {
   TicketCompra,
   TicketCompraInput,
@@ -74,6 +74,7 @@ export const ticketsService = {
   },
 
   async crearTicket(ticket: TicketCompraInput): Promise<TicketCompra> {
+    await requireActiveSession();
     const { data, error } = await supabase
       .from('tickets_compras')
       .insert(ticket)
