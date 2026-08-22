@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -149,7 +149,7 @@ export default function App() {
     targetMonth: currentMonth,
   });
 
-  // Sincronizar b├║squeda cuando se cambia de pesta├▒a manual
+  // Sincronizar búsqueda cuando se cambia de pestaña manual
   useEffect(() => {
     if (activeTab !== 'incomes') {
       setIncomeSearchTerm('');
@@ -165,7 +165,7 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  // Estados para di├ílogos de confirmaci├│n (Prompt 126)
+  // Estados para diálogos de confirmación (Prompt 126)
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -301,16 +301,16 @@ export default function App() {
         categoria: movimiento.categoria,
         subcategoria: movimiento.concepto,
         concepto: movimiento.observaciones || movimiento.concepto,
-        responsable: 'Veh├¡culo',
+        responsable: 'Vehículo',
         prioridad: 'Importante',
         tipo: 'Variable',
         tipo_gasto: 'variable',
         estado_pago: 'Pagado',
         servicio_clave: `vehiculo:${originId}`,
-        origen: 'Veh├¡culo',
+        origen: 'Vehículo',
         movimiento_origen_id: originId,
         vehiculo_id: movimiento.auto_id,
-        vehiculo_nombre: autoNames.get(movimiento.auto_id) || 'Veh├¡culo',
+        vehiculo_nombre: autoNames.get(movimiento.auto_id) || 'Vehículo',
       });
     });
 
@@ -363,7 +363,7 @@ export default function App() {
   useEffect(() => {
     const refreshVehicleExpenses = () => {
       fetchVehicleExpenses().catch(error => {
-        console.error('Error al refrescar gastos de veh├¡culos:', error);
+        console.error('Error al refrescar gastos de vehículos:', error);
       });
     };
     window.addEventListener('vehicle-movements-changed', refreshVehicleExpenses);
@@ -431,7 +431,7 @@ export default function App() {
             migratedCount++;
           } catch (err) {
             console.error('Error migrando gasto individual:', err);
-            throw new Error('Fallo en inserci├│n individual');
+            throw new Error('Fallo en inserción individual');
           }
         }
 
@@ -442,7 +442,7 @@ export default function App() {
           localStorage.removeItem('getagasto_categories');
           setHasLegacyData(false);
 
-          let message = `Migraci├│n finalizada.`;
+          let message = `Migración finalizada.`;
           if (migratedCount > 0) message += `\n- ${migratedCount} gastos nuevos migrados.`;
           if (duplicateCount > 0) message += `\n- ${duplicateCount} duplicados omitidos.`;
           alert(message);
@@ -453,8 +453,8 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Error en la migraci├│n general:', error);
-      alert('La migraci├│n se detuvo por un error. Los datos locales se conservaron para reintentar.');
+      console.error('Error en la migración general:', error);
+      alert('La migración se detuvo por un error. Los datos locales se conservaron para reintentar.');
     } finally {
       setIsLoading(false);
     }
@@ -473,7 +473,7 @@ export default function App() {
         // Guard: Evitar IDs virtuales de la UI en la base de datos (Prompt 082)
         if (id.startsWith('exp-')) {
           console.error("APP_ERROR_ID_VIRTUAL_DETECTADO:", id);
-          throw new Error("Est├ís intentando editar una proyecci├│n. Debes editar el gasto original desde la lista de gastos o historial real.");
+          throw new Error("Estás intentando editar una proyección. Debes editar el gasto original desde la lista de gastos o historial real.");
         }
 
         const { id: _, ...data } = newExpense;
@@ -573,7 +573,7 @@ export default function App() {
       console.error('Error al procesar gasto:', error);
     }
 
-    // CRITICAL: Cerrar modal y limpiar estado para evitar reset visual err├│neo (Prompt 082)
+    // CRITICAL: Cerrar modal y limpiar estado para evitar reset visual erróneo (Prompt 082)
     setIsFormOpen(false);
     setExpenseToEdit(null);
   };
@@ -645,7 +645,7 @@ export default function App() {
   };
 
   const handleEditExpense = (expense: Expense) => {
-    if (expense.origen === 'Veh├¡culo') {
+    if (expense.origen === 'Vehículo') {
       setActiveTab('autos');
       return;
     }
@@ -711,7 +711,7 @@ export default function App() {
     try {
       console.log("APP_GASTOS_PAGO_MENSUAL:", expenseId, pago.periodo_mes, pago.periodo_anio);
 
-      // Registrar o actualizar el registro de pago para evitar duplicados por per├¡odo
+      // Registrar o actualizar el registro de pago para evitar duplicados por período
 const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomic(pago);
 
       // Refrescar historial global
@@ -722,7 +722,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
       const pagosDelGasto = updatedHistory.filter(h => h.gasto_id === expenseId);
       const sumaPagos = pagosDelGasto.reduce((s, h) => s + Number(h.monto_pagado || 0), 0);
 
-      // Determinar fecha_pago m├ís reciente
+      // Determinar fecha_pago más reciente
       const fechas = pagosDelGasto.map(h => h.fecha_pago).filter(Boolean) as string[];
       const fechaMasReciente = fechas.length > 0 ? fechas.sort().reverse()[0] : undefined;
 
@@ -808,10 +808,10 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
       ]);
       setExpenses(newExpenses);
       setGlobalHistory(newHistory);
-      // alert('Fusi├│n exitosa. Los pagos han sido traspasados.');
+      // alert('Fusión exitosa. Los pagos han sido traspasados.');
     } catch (error) {
-      console.error('Error durante la fusi├│n:', error);
-      alert('La fusi├│n fall├│. Revisa la consola para m├ís detalles.');
+      console.error('Error durante la fusión:', error);
+      alert('La fusión falló. Revisa la consola para más detalles.');
     } finally {
       setIsLoading(false);
     }
@@ -847,11 +847,11 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
       return;
     }
 
-    // Caso est├índar sin pagos
+    // Caso estándar sin pagos
     setConfirmConfig({
       isOpen: true,
       title: 'Eliminar gasto',
-      description: '┬┐Est├ís seguro de que deseas eliminar este gasto permanentemente?',
+      description: '¿Estás seguro de que deseas eliminar este gasto permanentemente?',
       confirmLabel: 'Eliminar',
       variant: 'destructive',
       onConfirm: async () => {
@@ -870,7 +870,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
     setConfirmConfig({
       isOpen: true,
       title: 'Eliminar registro de pago',
-      description: '┬┐Est├ís seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se ver├í afectado.',
+      description: '¿Estás seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se verá afectado.',
       confirmLabel: 'Eliminar',
       variant: 'destructive',
       onConfirm: async () => {
@@ -942,7 +942,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
       setError(
         cause instanceof Error
           ? cause.message
-          : 'No se pudo cerrar la sesi├│n. Intent├í nuevamente.'
+          : 'No se pudo cerrar la sesión. Intentá nuevamente.'
       );
       setIsSigningOut(false);
     }
@@ -1059,7 +1059,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Gasto</th>
-            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Categor├¡a</th>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Categoría</th>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Responsable</th>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Estado</th>
             <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Monto</th>
@@ -1329,7 +1329,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
             active={activeTab === 'settings'}
             onClick={() => setActiveTab('settings')}
             icon={<SettingsIcon className="w-5 h-5" />}
-            label="Configuraci├│n"
+            label="Configuración"
           />
         </nav>
 
@@ -1354,7 +1354,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
             className="w-full justify-start text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl"
           >
             <LogOut className="w-5 h-5 mr-3" />
-            {isSigningOut ? 'Cerrando sesi├│n...' : 'Cerrar sesi├│n'}
+            {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
           </Button>
         </div>
       </aside>
@@ -1375,7 +1375,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
                 : activeTab === 'incomes'
                 ? 'Clientes y Cobranzas'
                 : activeTab === 'autos'
-                ? 'Control de Veh├¡culos'
+                ? 'Control de Vehículos'
                 : activeTab === 'clm'
                 ? 'CLM - Prospectos'
                 : activeTab === 'monthly-expenses'
@@ -1386,7 +1386,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
                 ? 'Consumo Inteligente'
                 : activeTab === 'tickets'
                 ? 'Cargar ticket'
-                : 'Configuraci├│n'}
+                : 'Configuración'}
             </h2>
           </div>
 
@@ -1410,8 +1410,8 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
               onClick={handleSignOut}
               disabled={isSigningOut}
               className="rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 md:hidden"
-              aria-label="Cerrar sesi├│n"
-              title="Cerrar sesi├│n"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
             >
               <LogOut className="h-5 w-5" />
             </Button>
@@ -1469,7 +1469,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
                   <div>
                     <p className="text-sm font-bold">Se detectaron datos locales antiguos</p>
                     <p className="text-xs opacity-80">
-                      ┬┐Deseas migrar tus gastos previos a la nueva base de datos de Supabase?
+                      ¿Deseas migrar tus gastos previos a la nueva base de datos de Supabase?
                     </p>
                   </div>
                 </div>
@@ -1481,7 +1481,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
                       setConfirmConfig({
                         isOpen: true,
                         title: 'Descartar datos antiguos',
-                        description: '┬┐Est├ís seguro de que deseas descartar los datos antiguos? Esta acci├│n no se puede deshacer.',
+                        description: '¿Estás seguro de que deseas descartar los datos antiguos? Esta acción no se puede deshacer.',
                         confirmLabel: 'Descartar',
                         variant: 'destructive',
                         onConfirm: () => {
@@ -1514,7 +1514,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
               >
                 <Bell className="w-5 h-5 shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold">Error de sincronizaci├│n</p>
+                  <p className="text-sm font-bold">Error de sincronización</p>
                   <p className="text-xs opacity-90">{error}</p>
                 </div>
                 <Button 
@@ -1696,7 +1696,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
         )}
       </AnimatePresence>
 
-      {/* Di├ílogo de Confirmaci├│n Gen├®rico */}
+      {/* Diálogo de Confirmación Genérico */}
       <Dialog 
         open={confirmConfig.isOpen} 
         onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, isOpen: open }))}
@@ -1732,7 +1732,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
         </DialogContent>
       </Dialog>
 
-      {/* Di├ílogo de Opci├│n de Eliminaci├│n Compleja (Gasto con historial) */}
+      {/* Diálogo de Opción de Eliminación Compleja (Gasto con historial) */}
       <Dialog 
         open={deleteChoiceConfig.isOpen} 
         onOpenChange={(open) => setDeleteChoiceConfig(prev => ({ ...prev, isOpen: open }))}
@@ -1749,11 +1749,11 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
                 </p>
                 {deleteChoiceConfig.hasDuplicate && (
                   <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-blue-800 text-sm">
-                    <p className="font-bold mb-1">┬íDuplicado detectado!</p>
+                    <p className="font-bold mb-1">¡Duplicado detectado!</p>
                     <p>Parece ser un duplicado de: <span className="font-black italic">"{deleteChoiceConfig.duplicateName}"</span></p>
                   </div>
                 )}
-                <p>┬┐Qu├® deseas hacer?</p>
+                <p>¿Qué deseas hacer?</p>
               </div>
             </DialogDescription>
           </DialogHeader>
