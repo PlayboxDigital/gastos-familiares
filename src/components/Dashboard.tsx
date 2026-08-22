@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+
 import {
   TrendingUp,
   TrendingDown,
@@ -20,6 +21,17 @@ import {
   ArrowRight,
   MessageSquare,
   X,
+  House,
+  Wrench,
+  Car,
+  Baby,
+  Repeat,
+  Gift,
+  Bus,
+  Plane,
+  HeartPulse,
+  PawPrint,
+  HelpCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Expense, CategoryConfig, PaymentStatus, GastoPagoHistorial, Income, Debt, IngresoPago } from '../types';
@@ -27,9 +39,10 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMon
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
+import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getExpensePeriodStatus, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
 import { MonthlyFinancialSummary } from '../utils/monthlyFinancialSummary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import DashboardDetailDialog from './DashboardDetailDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -49,6 +62,7 @@ import {
 } from 'recharts';
 
 interface DashboardProps {
+  userName?: string;
   expenses: Expense[];
   categories: CategoryConfig[];
   incomes?: Income[];
@@ -73,6 +87,7 @@ type ExpenseWithCredit = Expense & {
 };
 
 const Dashboard: React.FC<DashboardProps> = ({
+    userName = 'Familia',
     expenses = [],
   categories = [],
   incomes = [],
@@ -88,6 +103,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isCobroModalOpen, setIsCobroModalOpen] = React.useState(false);
   const [activeCobroTab, setActiveCobroTab] = React.useState<string>("debtors");
   const [activeKpiDetail, setActiveKpiDetail] = React.useState<KpiDetailType | null>(null);
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = React.useState<string | null>(null);
 
   const { currentMonth, currentPeriod } = useMemo(() => {
     const d = new Date();
@@ -97,12 +113,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
   }, []);
 
-  const getPaidForMonth = React.useCallback((
-    expense: Expense,
-    targetMonth: Date,
-    historyEntries: GastoPagoHistorial[] = []
-  ): number => {
-    if (!expense || expense.archived) return 0;
+const getPaidForMonth = React.useCallback((
+  expense: Expense,
+  targetMonth: Date,
+  historyEntries: GastoPagoHistorial[] = []
+): number => {
+  if (!expense || expense.archived) return 0;
 
     const year = targetMonth.getFullYear();
     const month = targetMonth.getMonth() + 1;
@@ -200,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [expenses, currentMonth]);
 
-  const getStatus = (e: Expense) => getExpensePaymentStatusForPeriod(e as ExpenseWithCredit, currentMonth.getFullYear(), currentMonth.getMonth() + 1, history);
+  const getStatus = (e: Expense) => getExpensePeriodStatus(e as ExpenseWithCredit, currentMonth.getFullYear(), currentMonth.getMonth() + 1, history).status;
 
   const promedioMensualData = useMemo(() => {
     const monthsWithData: number[] = [];
@@ -389,7 +405,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [monthlyExpenses]);
 
   const historicMonthlyPayments = useMemo(() => {
-    const months = [3, 4, 5, 6].map(month => new Date(2026, month, 1));
+    const firstRealMonth = new Date(2026, 5, 1); // Junio 2026
+    const lastMonth = startOfMonth(currentMonth);
+    const months: Date[] = [];
+
+    let cursor = new Date(firstRealMonth);
+    while (cursor <= lastMonth) {
+      months.push(new Date(cursor));
+      cursor = addMonths(cursor, 1);
+    }
 
     return months.map((date) => {
       const year = date.getFullYear();
@@ -409,6 +433,86 @@ const Dashboard: React.FC<DashboardProps> = ({
       };
     });
   }, [history, currentMonth]);
+
+  const paidByCategory = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+
+    const rows = history
+      .filter((payment) => {
+        const period = getPaymentEffectivePeriod(payment);
+        return period?.year === year &&
+          period.month === month &&
+          Number(payment.monto_pagado || 0) > 0;
+      })
+      .map((payment) => {
+        const expense = expenses.find((item) => item.id === payment.gasto_id);
+        const category =
+          (payment.categoria_snapshot || expense?.categoria || 'Sin categoría').trim() ||
+          'Sin categoría';
+        const concept =
+          payment.gasto_concepto_snapshot ||
+          expense?.subcategoria ||
+          expense?.concepto ||
+          category;
+        const rawDate = payment.fecha_pago || payment.fecha_registro || payment.created_at;
+        const parsedDate = rawDate ? new Date(rawDate) : null;
+
+        return {
+          id: payment.id,
+          category,
+          concept,
+          amount: Number(payment.monto_pagado || 0),
+          responsible:
+            payment.responsable_snapshot?.trim() ||
+            expense?.responsable?.trim() ||
+            'Sin responsable',
+          date: parsedDate && isValid(parsedDate) ? parsedDate : null,
+        };
+      });
+
+    const grouped = new Map<string, {
+      category: string;
+      total: number;
+      count: number;
+      rows: typeof rows;
+    }>();
+
+    rows.forEach((row) => {
+      const previous = grouped.get(row.category) || {
+        category: row.category,
+        total: 0,
+        count: 0,
+        rows: [],
+      };
+
+      previous.total += row.amount;
+      previous.count += 1;
+      previous.rows.push(row);
+      grouped.set(row.category, previous);
+    });
+
+    const categories = Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        rows: [...group.rows].sort(
+          (a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0)
+        ),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const total = categories.reduce((sum, category) => sum + category.total, 0);
+
+    return { categories, total };
+  }, [history, expenses, currentMonth]);
+
+  const selectedCategoryDetail = useMemo(
+    () =>
+      paidByCategory.categories.find(
+        (item) => item.category === selectedExpenseCategory
+      ) || null,
+    [paidByCategory.categories, selectedExpenseCategory]
+  );
 
   const [spendingPeriod, setSpendingPeriod] = React.useState<SpendingPeriod>('current');
 
@@ -773,7 +877,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="text-center md:text-left">
           <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter">
-            ¡Hola, Familia!
+          ¡Hola, {userName}!
           </h2>
           <p className="text-[10px] md:text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
             Resumen de actividad • {currentMonthName} {new Date().getFullYear()}
@@ -819,28 +923,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
       </div>
 
-      <Dialog open={activeKpiDetail !== null} onOpenChange={(open) => !open && setActiveKpiDetail(null)}>
-        <DialogContent
-          showCloseButton={false}
-          className="max-h-[92dvh] w-[calc(100vw-16px)] max-w-3xl gap-0 overflow-hidden rounded-3xl border-none p-0 shadow-2xl"
-        >
-          <DialogHeader className="sticky top-0 z-10 border-b border-slate-100 bg-white px-5 py-5 pr-16 md:px-7">
-            <DialogTitle className="text-xl font-black tracking-tight text-slate-900">
-              {activeKpiDetail === 'income' && 'Ingresos del mes'}
-              {activeKpiDetail === 'paid' && 'Pagado este mes'}
-              {activeKpiDetail === 'pending' && 'Pendiente real'}
-              {activeKpiDetail === 'projected' && 'Disponible proyectado'}
-            </DialogTitle>
-            <CardDescription className="text-xs uppercase tracking-[0.18em] text-slate-400">
-              Detalle de los conceptos incluidos en el KPI
-            </CardDescription>
-            <DialogClose className="absolute right-5 top-5 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-              <X className="h-5 w-5" />
-              <span className="sr-only">Cerrar</span>
-            </DialogClose>
-          </DialogHeader>
-
-          <div className="max-h-[calc(92dvh-108px)] overflow-y-auto bg-slate-50/50 p-4 md:p-6">
+      <DashboardDetailDialog
+        open={activeKpiDetail !== null}
+        onOpenChange={(open) => !open && setActiveKpiDetail(null)}
+        title={activeKpiDetail === 'income' ? 'Ingresos del mes' : activeKpiDetail === 'paid' ? 'Pagado este mes' : activeKpiDetail === 'pending' ? 'Pendiente real' : activeKpiDetail === 'projected' ? 'Disponible proyectado' : 'Detalle'}
+        subtitle={<span className="text-xs uppercase tracking-[0.18em] text-slate-400">Detalle de los conceptos incluidos en el KPI</span>}
+        footer={null}
+      >
+        <div className="bg-slate-50/50 p-0 md:p-0">
             {activeKpiDetail === 'income' && (
               <KpiDetailSection
                 isEmpty={incomeDetailRows.length === 0}
@@ -848,16 +938,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                 footerValue={monthlyIncome}
               >
                 {incomeDetailRows.map(row => (
-                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate font-black text-slate-900">{row.concept}</p>
+                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4 w-full min-w-0">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="min-w-0 w-full">
+                        <p className="break-words whitespace-normal font-black text-slate-900">{row.concept}</p>
                         <p className="mt-1 text-xs font-bold text-slate-500">{row.source}</p>
                         <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
                           {row.status} · {row.period}
                         </p>
                       </div>
-                      <p className="shrink-0 font-black tabular-nums text-emerald-600">${row.amount.toLocaleString('es-AR')}</p>
+                      <p className="shrink-0 font-black tabular-nums text-emerald-600 text-right whitespace-nowrap">${row.amount.toLocaleString('es-AR')}</p>
                     </div>
                   </div>
                 ))}
@@ -894,17 +984,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                     return (
                       <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
                         <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="truncate font-black text-slate-900">{row.concept}</p>
-                            <p className="mt-1 text-xs font-bold text-slate-500">{row.person}</p>
-                            <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
+                              <div className="min-w-0 w-full">
+                                <p className="break-words whitespace-normal font-black text-slate-900">{row.concept}</p>
+                                <p className="mt-1 text-xs font-bold text-slate-500">{row.person}</p>
+                                <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
                               <span className={row.status === 'Completo' ? 'text-emerald-600' : 'text-amber-600'}>{row.status}</span>
                               <span className="text-slate-400">{row.source}</span>
                               {paymentDate && isValid(paymentDate) && <span className="text-slate-400">{format(paymentDate, 'dd MMM yyyy', { locale: es })}</span>}
                               {row.paymentMethod && <span className="text-slate-400">{row.paymentMethod}</span>}
                             </div>
                           </div>
-                          <p className="shrink-0 font-black tabular-nums text-indigo-600">${row.amount.toLocaleString('es-AR')}</p>
+                          <p className="shrink-0 font-black tabular-nums text-indigo-600 text-right whitespace-nowrap">${row.amount.toLocaleString('es-AR')}</p>
                         </div>
                       </div>
                     );
@@ -920,10 +1010,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                 footerValue={pendingReal}
               >
                 {pendingDetailRows.map(row => (
-                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate font-black text-slate-900">{row.concept}</p>
+                  <div key={row.id} className="rounded-2xl border border-slate-100 bg-white p-4 w-full min-w-0">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="min-w-0 w-full">
+                        <p className="break-words whitespace-normal font-black text-slate-900">{row.concept}</p>
                         <p className="mt-1 text-xs font-bold text-slate-500">
                           Exigible: ${row.required.toLocaleString('es-AR')} · Pagado: ${row.paid.toLocaleString('es-AR')}
                         </p>
@@ -932,7 +1022,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                           <span className="text-slate-400">Vence {format(row.deadline, 'dd MMM yyyy', { locale: es })}</span>
                         </div>
                       </div>
-                      <p className="shrink-0 font-black tabular-nums text-amber-600">${row.pending.toLocaleString('es-AR')}</p>
+                      <p className="shrink-0 font-black tabular-nums text-amber-600 text-right whitespace-nowrap">${row.pending.toLocaleString('es-AR')}</p>
                     </div>
                   </div>
                 ))}
@@ -948,9 +1038,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                   footerValue={monthlyIncome}
                 >
                   {incomeDetailRows.map(row => (
-                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3">
-                      <p className="truncate text-sm font-bold text-slate-700">{row.concept}</p>
-                      <p className="shrink-0 font-black text-emerald-600">${row.amount.toLocaleString('es-AR')}</p>
+                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3 w-full min-w-0">
+                      <p className="break-words whitespace-normal text-sm font-bold text-slate-700">{row.concept}</p>
+                      <p className="shrink-0 font-black text-emerald-600 whitespace-nowrap">${row.amount.toLocaleString('es-AR')}</p>
                     </div>
                   ))}
                 </KpiDetailSection>
@@ -962,9 +1052,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                   footerValue={totalPagado + pendingReal}
                 >
                   {projectedCommitmentRows.map(row => (
-                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3">
-                      <p className="truncate text-sm font-bold text-slate-700">{row.concept}</p>
-                      <p className="shrink-0 font-black text-rose-600">${row.amount.toLocaleString('es-AR')}</p>
+                    <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3 w-full min-w-0">
+                      <p className="break-words whitespace-normal text-sm font-bold text-slate-700">{row.concept}</p>
+                      <p className="shrink-0 font-black text-rose-600 whitespace-nowrap">${row.amount.toLocaleString('es-AR')}</p>
                     </div>
                   ))}
                 </KpiDetailSection>
@@ -979,9 +1069,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
             )}
-          </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </DashboardDetailDialog>
 
       {(pagosPendientesUnified.length > 0 || clientesPorCobrar.length > 0) && (
         <Card className="overflow-hidden rounded-3xl border-none bg-white shadow-xl shadow-slate-200/50">
@@ -1113,7 +1202,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <CardHeader className="px-4 py-4 md:px-6">
           <CardTitle className="text-lg font-black text-slate-900">Evolución de gastos</CardTitle>
           <CardDescription className="text-xs uppercase tracking-[0.2em] text-slate-400">
-            Gastos pagados en los últimos cuatro meses
+            Gastos pagados desde junio de 2026
           </CardDescription>
         </CardHeader>
         <CardContent className="px-4 pb-5 md:px-6">
@@ -1274,22 +1363,40 @@ const Dashboard: React.FC<DashboardProps> = ({
         </CardContent>
       </Card>
 
-      <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
-        <DialogContent showCloseButton={false} className="max-w-[calc(100vw-16px)] sm:max-w-xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl max-h-[75dvh] sm:h-auto flex flex-col">
-          <DialogHeader className="p-6 md:p-8 bg-indigo-600 text-white relative shrink-0">
-            <div className="absolute top-0 right-0 p-8 opacity-10">
-              <Users className="w-32 h-32" />
-            </div>
-            <DialogClose className="absolute right-4 top-4 rounded-full p-2.5 text-white/70 hover:text-white hover:bg-white/15 transition-all z-50">
-              <X className="w-5 h-5" />
-            </DialogClose>
-            <DialogTitle className="text-2xl md:text-3xl font-black tracking-tighter pr-8">Cobro Mensual Clientes</DialogTitle>
-            <p className="text-indigo-100 text-xs font-bold uppercase tracking-widest mt-1 opacity-80">
-              Resumen de cobranzas • {currentMonthName} {new Date().getFullYear()}
-            </p>
-          </DialogHeader>
+      <DashboardDetailDialog
+        open={isCobroModalOpen}
+        onOpenChange={setIsCobroModalOpen}
+        title="Cobro Mensual Clientes"
+        subtitle={<span className="text-indigo-100 text-xs font-bold uppercase tracking-widest">Resumen de cobranzas • {currentMonthName} {new Date().getFullYear()}</span>}
+        footer={(
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button 
+              variant="outline" 
+              className="rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest border-slate-200 text-slate-500 active:scale-95 transition-transform"
+              onClick={() => setIsCobroModalOpen(false)}
+            >
+              Cerrar resumen
+            </Button>
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-100 gap-2 active:scale-95 transition-transform"
+              onClick={() => {
+                setIsCobroModalOpen(false);
+                onSelectDebtors?.();
+              }}
+            >
+              Ver todos los clientes
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+      >
+        <div className="relative shrink-0">
+          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+            <Users className="w-32 h-32" />
+          </div>
+        </div>
 
-          <Tabs value={activeCobroTab} onValueChange={setActiveCobroTab} className="flex-1 flex flex-col overflow-hidden">
+        <Tabs value={activeCobroTab} onValueChange={setActiveCobroTab} className="flex-1 flex flex-col overflow-hidden">
             <div className="px-6 md:px-8 mt-4 shrink-0">
               <TabsList className="w-full h-12 p-1 bg-slate-100 rounded-2xl grid grid-cols-2">
                 <TabsTrigger 
@@ -1415,30 +1522,187 @@ const Dashboard: React.FC<DashboardProps> = ({
               </TabsContent>
             </div>
           </Tabs>
+      </DashboardDetailDialog>
 
-          <DialogFooter className="p-6 bg-slate-50 flex-col sm:flex-row gap-3 shrink-0">
-            <Button 
-              variant="outline" 
-              className="rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest border-slate-200 text-slate-500 active:scale-95 transition-transform"
-              onClick={() => setIsCobroModalOpen(false)}
+
+
+<Card className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+  <CardHeader className="border-b border-slate-100 px-5 py-5 md:px-6">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <CardTitle className="text-base font-black text-slate-900">
+          Gastos por categoría
+        </CardTitle>
+
+        <CardDescription className="mt-1 text-xs text-slate-500">
+          Desglose de pagos reales · {format(currentMonth, 'MMMM yyyy', { locale: es })}
+        </CardDescription>
+      </div>
+
+      <div className="text-left sm:text-right">
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+          Total del mes
+        </p>
+
+        <p className="text-lg font-black tabular-nums text-slate-900">
+          ${paidByCategory.total.toLocaleString('es-AR')}
+        </p>
+      </div>
+    </div>
+  </CardHeader>
+
+  <CardContent className="p-4 md:p-5">
+    {paidByCategory.categories.length > 0 ? (
+<div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {paidByCategory.categories.map((category) => {
+          const percentage =
+            paidByCategory.total > 0
+              ? (category.total / paidByCategory.total) * 100
+              : 0;
+const normalizedCategory = category.category.toLowerCase();
+
+const CategoryIcon =
+  normalizedCategory.includes('vivienda') ? House :
+  normalizedCategory.includes('comida') ? Pizza :
+  normalizedCategory.includes('servicio') ? Wrench :
+  normalizedCategory.includes('vehículo') || normalizedCategory.includes('vehiculo') ? Car :
+  normalizedCategory.includes('hijo') ? Baby :
+  normalizedCategory.includes('suscrip') ? Repeat :
+  normalizedCategory.includes('ocio') || normalizedCategory.includes('regalo') ? Gift :
+  normalizedCategory.includes('transporte') ? Bus :
+  normalizedCategory.includes('viaje') ? Plane :
+  normalizedCategory.includes('salud') ? HeartPulse :
+  normalizedCategory.includes('mascota') ? PawPrint :
+  normalizedCategory.includes('gastos varios') ? Wallet :
+  HelpCircle;
+          return (
+            <button
+              key={category.category}
+              type="button"
+              onClick={() => setSelectedExpenseCategory(category.category)}
+className="
+  group
+  aspect-square
+  w-full
+  rounded-2xl
+                border
+                border-slate-100
+                bg-white
+                px-4
+                py-3
+                text-left
+                transition
+                hover:border-indigo-200
+                hover:bg-slate-50
+                focus:outline-none
+                focus-visible:ring-2
+                focus-visible:ring-indigo-500
+              "
             >
-              Cerrar resumen
-            </Button>
-            <Button 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl h-12 flex-1 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-100 gap-2 active:scale-95 transition-transform"
-              onClick={() => {
-                setIsCobroModalOpen(false);
-                onSelectDebtors?.();
-              }}
-            >
-              Ver todos los clientes
-              <ArrowRight className="w-3 h-3" />
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+<div className="flex h-full flex-col">
+  <div className="flex items-start justify-between">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+<CategoryIcon className="h-4 w-4" />
+    </div>
 
+    <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-indigo-500" />
+  </div>
 
+  <div className="mt-3 min-w-0">
+    <p className="break-words text-sm font-black leading-tight text-slate-900">
+      {category.category}
+    </p>
+
+    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+      {category.count} {category.count === 1 ? 'movimiento' : 'movimientos'}
+    </p>
+  </div>
+
+  <div className="mt-auto pt-3">
+    <div className="flex items-end justify-between gap-2">
+      <p className="text-sm font-black tabular-nums text-slate-900">
+        ${category.total.toLocaleString('es-AR')}
+      </p>
+
+      <p className="shrink-0 text-[9px] font-black text-slate-400">
+        {percentage.toLocaleString('es-AR', {
+          maximumFractionDigits: 1,
+        })}%
+      </p>
+    </div>
+
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+      <div
+        className="h-full rounded-full bg-indigo-500 transition-all"
+        style={{
+          width: `${Math.max(
+            2,
+            Math.min(100, percentage)
+          )}%`,
+        }}
+      />
+    </div>
+  </div>
+</div>
+     </button>
+ );
+        })}
+      </div>
+    ) : (
+      <div className="rounded-2xl bg-slate-50 py-10 text-center">
+        <p className="text-sm font-bold text-slate-500">
+          No hay pagos registrados para este mes.
+        </p>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
+      <DashboardDetailDialog
+        open={selectedExpenseCategory !== null}
+        onOpenChange={(open) => !open && setSelectedExpenseCategory(null)}
+        title={selectedCategoryDetail?.category || 'Detalle de categoría'}
+        subtitle={
+          <span className="text-xs uppercase tracking-[0.18em] text-slate-400">
+            {format(currentMonth, 'MMMM yyyy', { locale: es })} · pagos reales
+          </span>
+        }
+        footer={null}
+      >
+        {selectedCategoryDetail ? (
+          <KpiDetailSection
+            isEmpty={selectedCategoryDetail.rows.length === 0}
+            footerLabel={`Total ${selectedCategoryDetail.category}`}
+            footerValue={selectedCategoryDetail.total}
+          >
+            {selectedCategoryDetail.rows.map((row) => (
+              <div
+                key={row.id}
+                className="w-full min-w-0 rounded-2xl border border-slate-100 bg-white p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-black text-slate-900">
+                      {row.concept}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {row.responsible}
+                    </p>
+                    <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      {row.date
+                        ? format(row.date, 'dd MMM yyyy', { locale: es })
+                        : 'Fecha no disponible'}
+                    </p>
+                  </div>
+                  <p className="shrink-0 whitespace-nowrap text-sm font-black tabular-nums text-indigo-600">
+                    ${row.amount.toLocaleString('es-AR')}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </KpiDetailSection>
+        ) : null}
+      </DashboardDetailDialog>
 
       <div className="grid grid-cols-1 pb-12">
         <Card className="rounded-2xl border-none bg-white shadow-xl shadow-slate-200/50 md:rounded-[2.5rem]">
@@ -1573,17 +1837,30 @@ const KpiDetailSection: React.FC<KpiDetailSectionProps> = ({
   children,
 }) => (
   <section className="space-y-3">
-    {title && <h3 className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{title}</h3>}
+    {title && (
+      <h3 className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+        {title}
+      </h3>
+    )}
+
     {isEmpty ? (
       <div className="rounded-2xl bg-white py-10 text-center text-sm font-bold text-slate-400">
         No hay movimientos para este período.
       </div>
     ) : (
-      <div className="space-y-2">{children}</div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 min-w-0">
+        {children}
+      </div>
     )}
+
     <div className="sticky bottom-0 flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <span className="text-xs font-black uppercase tracking-wider text-slate-500">{footerLabel}</span>
-      <span className="text-lg font-black tabular-nums text-slate-900">${footerValue.toLocaleString('es-AR')}</span>
+      <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+        {footerLabel}
+      </span>
+
+      <span className="text-lg font-black tabular-nums text-slate-900">
+        ${footerValue.toLocaleString('es-AR')}
+      </span>
     </div>
   </section>
 );

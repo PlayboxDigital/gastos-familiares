@@ -187,6 +187,31 @@ export const getExpensePaymentStatusForPeriod = (
   return 'Pendiente';
 };
 
+export interface ExpensePeriodStatus {
+  paidAmount: number;
+  dueAmount: number;
+  remainingAmount: number;
+  status: PaymentStatus;
+}
+
+export const getExpensePeriodStatus = (
+  expense: Expense,
+  year: number,
+  month: number,
+  historyEntries: GastoPagoHistorial[] = []
+): ExpensePeriodStatus => {
+  const paidAmount = getPaidAmountForPeriod(expense.id, year, month, historyEntries);
+  const dueAmount = getMontoExigible(expense, new Date(year, month - 1, 1));
+  const remainingAmount = Math.max(0, dueAmount - paidAmount);
+
+  let status: PaymentStatus = 'Pendiente';
+  if (dueAmount <= 0) status = 'Pagado';
+  else if (paidAmount >= dueAmount) status = 'Pagado';
+  else if (paidAmount > 0) status = 'Parcial';
+
+  return { paidAmount, dueAmount, remainingAmount, status };
+};
+
 export const getPendingAmountForPeriod = (
   expense: Expense,
   year: number,

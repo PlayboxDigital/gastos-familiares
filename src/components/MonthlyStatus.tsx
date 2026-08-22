@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import DashboardDetailDialog from './DashboardDetailDialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -57,6 +58,7 @@ import {
 import { Expense, GastoPagoHistorial, PaymentStatus, TicketCompra } from '../types';
 import {
   getExpensePaymentStatusForPeriod,
+  getExpensePeriodStatus,
   getMontoExigible,
   getPaidAmountForPeriod,
   getPaymentEffectivePeriod,
@@ -282,12 +284,12 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
     const expenseRows = applicableExpenses.map((expense) => {
       const paid = getPaidAmountForPeriod(expense.id, year, month, history);
       const pending = getPendingAmountForPeriod(expense, year, month, history);
-      let status: MonthlyRow['status'] = getExpensePaymentStatusForPeriod(
+      let status: MonthlyRow['status'] = getExpensePeriodStatus(
         expense,
         year,
         month,
         history
-      );
+      ).status;
       const dueDay = Number(expense.dia_vencimiento || 0);
       if (
         status === 'Pendiente' &&
@@ -358,6 +360,8 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
     isTicketExpense,
     isVehicleExpense,
   ]);
+
+  // Auditoría temporal removida para evitar errores de inicialización.
 
   const paidTotal = useMemo(
     () => paidEvents.reduce((sum, event) => sum + event.amount, 0),
@@ -686,7 +690,7 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
             <TableHeader className="bg-slate-50">
               <TableRow>
                 {['Fecha', 'Concepto', 'Categoría', 'Responsable', 'Tipo', 'Estado', 'Monto', 'Origen', 'Acciones'].map((heading) => (
-                  <TableHead key={heading} className="whitespace-nowrap text-[10px] font-black uppercase tracking-wider">{heading}</TableHead>
+                  <TableHead key={heading} className="text-[10px] font-black uppercase tracking-wider">{heading}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -696,7 +700,7 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
                   <TableCell className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     {safeDate(row.date) ? format(safeDate(row.date)!, 'dd/MM/yyyy') : '—'}
                   </TableCell>
-                  <TableCell className="min-w-52 font-black text-slate-900">{row.concept}</TableCell>
+                  <TableCell className="min-w-0 break-words font-black text-slate-900">{row.concept}</TableCell>
                   <TableCell className="text-xs text-slate-600">{row.category}</TableCell>
                   <TableCell className="text-xs text-slate-600">{row.responsible}</TableCell>
                   <TableCell className="text-xs font-semibold">{row.type}</TableCell>
@@ -735,6 +739,8 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
           </Table>
         </Card>
       </section>
+
+    
 
       <Card className="rounded-3xl border-none shadow-xl shadow-slate-200/50">
         <CardHeader>
@@ -875,57 +881,55 @@ const DetailDialog: React.FC<{
     breakdown?: { label: string; value: number }[];
   } | null;
 }> = ({ open, onClose, period, config }) => (
-  <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-    <DialogContent showCloseButton={false} className="max-h-[92dvh] w-[calc(100vw-16px)] max-w-3xl gap-0 overflow-hidden rounded-3xl border-none p-0 shadow-2xl">
-      <DialogHeader className="relative border-b border-slate-100 bg-white px-6 py-5 pr-16">
-        <DialogTitle className="text-xl font-black">{config?.title || 'Detalle'}</DialogTitle>
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{period}</p>
-        <DialogClose className="absolute right-5 top-5 rounded-full p-2 text-slate-400 hover:bg-slate-100" aria-label="Cerrar">
-          <X className="h-5 w-5" />
-        </DialogClose>
-      </DialogHeader>
-      <div className="max-h-[calc(92dvh-100px)] overflow-y-auto bg-slate-50/60 p-4 md:p-6">
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-white p-4">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Subtotal</p>
-            <p className="mt-1 text-xl font-black">{money.format(config?.subtotal || 0)}</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Registros</p>
-            <p className="mt-1 text-xl font-black">{config?.events.length || 0}</p>
-          </div>
+  <DashboardDetailDialog
+    open={open}
+    onOpenChange={(nextOpen) => !nextOpen && onClose()}
+    title={config?.title || 'Detalle'}
+    subtitle={<span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{period}</span>}
+    footer={(
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+        <span className="text-xs font-black uppercase tracking-wider text-slate-500">Total</span>
+        <span className="text-xl font-black">{money.format(config?.subtotal || 0)}</span>
+      </div>
+    )}
+  >
+    <div className="bg-slate-50/60 p-0 md:p-6">
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Subtotal</p>
+          <p className="mt-1 text-xl font-black">{money.format(config?.subtotal || 0)}</p>
         </div>
-        {config?.breakdown && (
-          <div className="mb-4 grid gap-2 sm:grid-cols-2">
-            {config.breakdown.map((item) => (
-              <div key={item.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  {item.label}
-                </span>
-                <span className="text-sm font-black text-slate-900">{money.format(item.value)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="space-y-2">
-          {config?.events.map((event) => (
-            <div key={event.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white p-4">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black text-slate-900">{event.concept}</p>
-                <p className="text-[10px] font-bold uppercase text-slate-400">
-                  {event.category} · {event.responsible} · {sourceLabel[event.source]} · {event.status}
-                </p>
-              </div>
-              <span className="whitespace-nowrap font-black">{money.format(event.amount)}</span>
-            </div>
-          ))}
-          {!config?.events.length && <p className="py-10 text-center text-sm text-slate-400">No hay movimientos para este período.</p>}
-        </div>
-        <div className="sticky bottom-0 mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">Total</span>
-          <span className="text-xl font-black">{money.format(config?.subtotal || 0)}</span>
+        <div className="rounded-2xl bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Registros</p>
+          <p className="mt-1 text-xl font-black">{config?.events.length || 0}</p>
         </div>
       </div>
-    </DialogContent>
-  </Dialog>
+      {config?.breakdown && (
+        <div className="mb-4 grid gap-2 sm:grid-cols-2">
+          {config.breakdown.map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {item.label}
+              </span>
+              <span className="text-sm font-black text-slate-900">{money.format(item.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-2">
+        {config?.events.map((event) => (
+          <div key={event.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white p-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-900">{event.concept}</p>
+              <p className="text-[10px] font-bold uppercase text-slate-400">
+                {event.category} · {event.responsible} · {sourceLabel[event.source]} · {event.status}
+              </p>
+            </div>
+            <span className="whitespace-nowrap font-black">{money.format(event.amount)}</span>
+          </div>
+        ))}
+        {!config?.events.length && <p className="py-10 text-center text-sm text-slate-400">No hay movimientos para este período.</p>}
+      </div>
+    </div>
+  </DashboardDetailDialog>
 );

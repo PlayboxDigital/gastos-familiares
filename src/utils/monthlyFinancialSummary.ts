@@ -128,41 +128,6 @@ export const getMonthlyFinancialSummary = ({
     }];
   });
 
-  const expenseIdsWithRealPayments = new Set(
-    paymentMovements.map((movement) => movement.expenseId).filter(Boolean)
-  );
-  const paidWithoutHistory = expenses
-    .filter(
-      (expense) =>
-        expense.archived !== true &&
-        expense.estado_pago === 'Pagado' &&
-        !expenseIdsWithRealPayments.has(expense.id) &&
-        isExpenseApplicableInMonth(expense, targetMonth)
-    )
-    .flatMap<MonthlyFinancialMovement>((expense) => {
-      const amount = getMontoExigible(expense, targetMonth);
-      if (amount <= 0) return [];
-      const source: MonthlyFinancialSource = isTicketExpense(expense)
-        ? 'ticket'
-        : isVehicleExpense(expense)
-          ? 'vehicle'
-          : expense.tipo === 'Fijo'
-            ? 'fixed'
-            : 'variable';
-
-      return [{
-        id: `paid-state:${expense.id}:${year}-${month}`,
-        expenseId: expense.id,
-        date: expense.fecha_pago || expense.fecha,
-        concept: expenseConcept(expense),
-        category: expense.categoria || 'Sin categoría',
-        responsible: expense.responsable || 'Sin responsable',
-        amount,
-        source,
-        paymentStatus: 'Completo',
-      }];
-    });
-
   const vehicleMovements = vehicleExpenses
     .filter((expense) => {
       const date = safeDate(expense.fecha);
@@ -190,7 +155,6 @@ export const getMonthlyFinancialSummary = ({
 
   const movimientos = [
     ...paymentMovements,
-    ...paidWithoutHistory,
     ...vehicleMovements,
   ].sort(
     (a, b) => (safeDate(b.date)?.getTime() || 0) - (safeDate(a.date)?.getTime() || 0)

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,6 +26,7 @@ import {
 } from './types';
 import { CATEGORIES } from './constants';
 import { gastosService } from './services/gastos';
+import { ticketsService } from './services/tickets';
 import { presupuestosService } from './services/presupuestos';
 import { gastosPagosHistorialService } from './services/gastosPagosHistorial';
 import { deudasService } from './services/deudas';
@@ -40,10 +41,7 @@ import { ClientDetail } from './components/ClientDetail';
 import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
 import { ExpenseList } from './components/ExpenseList';
-import { ConsumoInteligente } from './components/ConsumoInteligente';
-import { TicketScanner } from './components/TicketScanner';
 import { MonthlyStatus } from './components/MonthlyStatus';
-import { ticketsService } from './services/tickets';
 import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense } from './utils/expenseLogic';
 import { getMonthlyFinancialSummary } from './utils/monthlyFinancialSummary';
 import { useAuth } from './hooks/useAuth';
@@ -64,10 +62,10 @@ import {
   Activity,
   Car,
   Trash2,
-  Users,
-  DollarSign,
-  Zap,
-  ScanLine
+Users,
+DollarSign,
+Zap,
+ScanLine,
 } from 'lucide-react';
 import {
   Dialog,
@@ -94,6 +92,31 @@ const getEstadoPagoReal = (
 
 export default function App() {
   const { signOut, familiaNombre, user } = useAuth();
+  const dashboardUserName = React.useMemo(() => {
+  const metadataName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.user_metadata?.display_name;
+
+  if (metadataName && String(metadataName).trim()) {
+    return String(metadataName).trim().split(/\s+/)[0];
+  }
+
+  const emailName = user?.email?.split('@')[0] || '';
+
+  if (emailName) {
+    const clean = emailName
+      .replace(/[._-]+/g, ' ')
+      .trim()
+      .split(/\s+/)[0];
+
+    if (clean) {
+      return clean.charAt(0).toUpperCase() + clean.slice(1);
+    }
+  }
+
+  return 'Familia';
+}, [user]);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
@@ -126,7 +149,7 @@ export default function App() {
     targetMonth: currentMonth,
   });
 
-  // Sincronizar búsqueda cuando se cambia de pestaña manual
+  // Sincronizar b├║squeda cuando se cambia de pesta├▒a manual
   useEffect(() => {
     if (activeTab !== 'incomes') {
       setIncomeSearchTerm('');
@@ -142,7 +165,7 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  // Estados para diálogos de confirmación (Prompt 126)
+  // Estados para di├ílogos de confirmaci├│n (Prompt 126)
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -278,16 +301,16 @@ export default function App() {
         categoria: movimiento.categoria,
         subcategoria: movimiento.concepto,
         concepto: movimiento.observaciones || movimiento.concepto,
-        responsable: 'Vehículo',
+        responsable: 'Veh├¡culo',
         prioridad: 'Importante',
         tipo: 'Variable',
         tipo_gasto: 'variable',
         estado_pago: 'Pagado',
         servicio_clave: `vehiculo:${originId}`,
-        origen: 'Vehículo',
+        origen: 'Veh├¡culo',
         movimiento_origen_id: originId,
         vehiculo_id: movimiento.auto_id,
-        vehiculo_nombre: autoNames.get(movimiento.auto_id) || 'Vehículo',
+        vehiculo_nombre: autoNames.get(movimiento.auto_id) || 'Veh├¡culo',
       });
     });
 
@@ -340,7 +363,7 @@ export default function App() {
   useEffect(() => {
     const refreshVehicleExpenses = () => {
       fetchVehicleExpenses().catch(error => {
-        console.error('Error al refrescar gastos de vehículos:', error);
+        console.error('Error al refrescar gastos de veh├¡culos:', error);
       });
     };
     window.addEventListener('vehicle-movements-changed', refreshVehicleExpenses);
@@ -408,7 +431,7 @@ export default function App() {
             migratedCount++;
           } catch (err) {
             console.error('Error migrando gasto individual:', err);
-            throw new Error('Fallo en inserción individual');
+            throw new Error('Fallo en inserci├│n individual');
           }
         }
 
@@ -419,7 +442,7 @@ export default function App() {
           localStorage.removeItem('getagasto_categories');
           setHasLegacyData(false);
 
-          let message = `Migración finalizada.`;
+          let message = `Migraci├│n finalizada.`;
           if (migratedCount > 0) message += `\n- ${migratedCount} gastos nuevos migrados.`;
           if (duplicateCount > 0) message += `\n- ${duplicateCount} duplicados omitidos.`;
           alert(message);
@@ -430,8 +453,8 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Error en la migración general:', error);
-      alert('La migración se detuvo por un error. Los datos locales se conservaron para reintentar.');
+      console.error('Error en la migraci├│n general:', error);
+      alert('La migraci├│n se detuvo por un error. Los datos locales se conservaron para reintentar.');
     } finally {
       setIsLoading(false);
     }
@@ -450,7 +473,7 @@ export default function App() {
         // Guard: Evitar IDs virtuales de la UI en la base de datos (Prompt 082)
         if (id.startsWith('exp-')) {
           console.error("APP_ERROR_ID_VIRTUAL_DETECTADO:", id);
-          throw new Error("Estás intentando editar una proyección. Debes editar el gasto original desde la lista de gastos o historial real.");
+          throw new Error("Est├ís intentando editar una proyecci├│n. Debes editar el gasto original desde la lista de gastos o historial real.");
         }
 
         const { id: _, ...data } = newExpense;
@@ -471,16 +494,86 @@ export default function App() {
           console.log("APP_HANDLEADDEXPENSE_STATE_UPDATE_SUCCESS:", id);
           return updated;
         });
-      } else {
-        const { tipo_gasto, pagado, ...gastoPayload } = newExpense;
-        const createdExpense = await gastosService.crearGasto(gastoPayload);
-        setExpenses((prev) => [createdExpense, ...prev]);
+  } else {
+  const { tipo_gasto, pagado, ...gastoPayload } = newExpense;
+
+  const createdExpense = await gastosService.crearGasto(gastoPayload);
+
+  if (pagado) {
+    const fechaPago =
+      createdExpense.fecha_pago ||
+      createdExpense.fecha ||
+      new Date().toISOString().slice(0, 10);
+
+    const fechaPeriodo = new Date(`${fechaPago}T12:00:00`);
+
+    const montoPagado = Number(
+      createdExpense.monto_final_a_pagar ??
+      createdExpense.monto_neto ??
+      createdExpense.monto ??
+      0
+    );
+
+    const pagoInicial = {
+      gasto_id: createdExpense.id,
+      servicio_clave:
+        createdExpense.servicio_clave ||
+        createdExpense.concepto ||
+        createdExpense.subcategoria ||
+        '',
+
+      periodo_anio: fechaPeriodo.getFullYear(),
+      periodo_mes: fechaPeriodo.getMonth() + 1,
+
+      fecha_pago: fechaPago,
+      monto_pagado: montoPagado,
+      moneda: 'ARS',
+
+      // El formulario de Nuevo gasto actualmente no solicita medio de pago.
+      forma_pago: 'Efectivo',
+
+      entidad_pago: '',
+      referencia_pago: '',
+      observaciones: 'Pago registrado automáticamente al crear el gasto',
+
+      gasto_concepto_snapshot: createdExpense.concepto,
+      categoria_snapshot: createdExpense.categoria,
+      subcategoria_snapshot: createdExpense.subcategoria,
+      responsable_snapshot: createdExpense.responsable,
+      prioridad_snapshot: createdExpense.prioridad,
+      tipo_snapshot: createdExpense.tipo,
+    } as GastoPagoHistorialInput;
+
+  await gastosPagosHistorialService.registrarPagoPorPeriodoAtomic(
+  pagoInicial
+);
+    const updatedHistory =
+      await gastosPagosHistorialService.obtenerTodoElHistorial();
+
+    setGlobalHistory(updatedHistory);
+
+    const updatedExpense = await gastosService.actualizarGasto(
+      createdExpense.id,
+      {
+        estado_pago: 'Pagado',
+        total_abonado: montoPagado,
+        fecha_pago: fechaPago,
       }
+    );
+
+    setExpenses((prev) => [
+      { ...createdExpense, ...updatedExpense },
+      ...prev,
+    ]);
+  } else {
+    setExpenses((prev) => [createdExpense, ...prev]);
+  }
+}
     } catch (error) {
       console.error('Error al procesar gasto:', error);
     }
 
-    // CRITICAL: Cerrar modal y limpiar estado para evitar reset visual erróneo (Prompt 082)
+    // CRITICAL: Cerrar modal y limpiar estado para evitar reset visual err├│neo (Prompt 082)
     setIsFormOpen(false);
     setExpenseToEdit(null);
   };
@@ -552,7 +645,7 @@ export default function App() {
   };
 
   const handleEditExpense = (expense: Expense) => {
-    if (expense.origen === 'Vehículo') {
+    if (expense.origen === 'Veh├¡culo') {
       setActiveTab('autos');
       return;
     }
@@ -618,8 +711,8 @@ export default function App() {
     try {
       console.log("APP_GASTOS_PAGO_MENSUAL:", expenseId, pago.periodo_mes, pago.periodo_anio);
 
-      // Registrar o actualizar el registro de pago para evitar duplicados por período
-      const savedPago = await gastosPagosHistorialService.registrarOActualizarPagoPorPeriodo(pago);
+      // Registrar o actualizar el registro de pago para evitar duplicados por per├¡odo
+const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomic(pago);
 
       // Refrescar historial global
       const updatedHistory = await gastosPagosHistorialService.obtenerTodoElHistorial();
@@ -629,7 +722,7 @@ export default function App() {
       const pagosDelGasto = updatedHistory.filter(h => h.gasto_id === expenseId);
       const sumaPagos = pagosDelGasto.reduce((s, h) => s + Number(h.monto_pagado || 0), 0);
 
-      // Determinar fecha_pago más reciente
+      // Determinar fecha_pago m├ís reciente
       const fechas = pagosDelGasto.map(h => h.fecha_pago).filter(Boolean) as string[];
       const fechaMasReciente = fechas.length > 0 ? fechas.sort().reverse()[0] : undefined;
 
@@ -715,10 +808,10 @@ export default function App() {
       ]);
       setExpenses(newExpenses);
       setGlobalHistory(newHistory);
-      // alert('Fusión exitosa. Los pagos han sido traspasados.');
+      // alert('Fusi├│n exitosa. Los pagos han sido traspasados.');
     } catch (error) {
-      console.error('Error durante la fusión:', error);
-      alert('La fusión falló. Revisa la consola para más detalles.');
+      console.error('Error durante la fusi├│n:', error);
+      alert('La fusi├│n fall├│. Revisa la consola para m├ís detalles.');
     } finally {
       setIsLoading(false);
     }
@@ -754,11 +847,11 @@ export default function App() {
       return;
     }
 
-    // Caso estándar sin pagos
+    // Caso est├índar sin pagos
     setConfirmConfig({
       isOpen: true,
       title: 'Eliminar gasto',
-      description: '¿Estás seguro de que deseas eliminar este gasto permanentemente?',
+      description: '┬┐Est├ís seguro de que deseas eliminar este gasto permanentemente?',
       confirmLabel: 'Eliminar',
       variant: 'destructive',
       onConfirm: async () => {
@@ -777,7 +870,7 @@ export default function App() {
     setConfirmConfig({
       isOpen: true,
       title: 'Eliminar registro de pago',
-      description: '¿Estás seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se verá afectado.',
+      description: '┬┐Est├ís seguro de que deseas eliminar este registro de pago? El monto abonado del gasto se ver├í afectado.',
       confirmLabel: 'Eliminar',
       variant: 'destructive',
       onConfirm: async () => {
@@ -849,7 +942,7 @@ export default function App() {
       setError(
         cause instanceof Error
           ? cause.message
-          : 'No se pudo cerrar la sesión. Intentá nuevamente.'
+          : 'No se pudo cerrar la sesi├│n. Intent├í nuevamente.'
       );
       setIsSigningOut(false);
     }
@@ -857,15 +950,10 @@ export default function App() {
 
   const renderContent = () => {
     console.log("APP_RENDER_EXPENSES_ROWS:", Array.isArray(expenses) ? expenses.length : null);
+          
     
     switch (activeTab) {
-       case 'tickets':
-  return (
-    <TicketScanner
-      onBackToDashboard={() => setActiveTab('dashboard')}
-      onConfirmed={() => fetchData({ throwOnError: true, silent: true })}
-    />
-  );
+ 
        case 'dashboard':
   return (
     <div className="space-y-4">
@@ -884,6 +972,7 @@ export default function App() {
       </div>
 
       <Dashboard
+      userName={dashboardUserName}
         expenses={expenses}
         categories={categories}
         incomes={incomes}
@@ -970,7 +1059,7 @@ export default function App() {
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Gasto</th>
-            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Categoría</th>
+            <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Categor├¡a</th>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Responsable</th>
             <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">Estado</th>
             <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase">Monto</th>
@@ -1110,8 +1199,6 @@ export default function App() {
             onDelete={handleDeleteDebt}
           />
         );
-      case 'consumo-inteligente':
-        return <ConsumoInteligente />;
       case 'incomes':
         return (
           <IncomeList 
@@ -1237,23 +1324,12 @@ export default function App() {
             icon={<CreditCard className="w-5 h-5" />}
             label="Deudas"
           />
-          <SidebarLink
-            active={activeTab === 'consumo-inteligente'}
-            onClick={() => setActiveTab('consumo-inteligente')}
-            icon={<Zap className="w-5 h-5" />}
-            label="Consumo Inteligente"
-          />
-          <SidebarLink
-            active={activeTab === 'tickets'}
-            onClick={() => setActiveTab('tickets')}
-            icon={<ScanLine className="w-5 h-5" />}
-            label="Escanear ticket"
-          />
+
           <SidebarLink
             active={activeTab === 'settings'}
             onClick={() => setActiveTab('settings')}
             icon={<SettingsIcon className="w-5 h-5" />}
-            label="Configuración"
+            label="Configuraci├│n"
           />
         </nav>
 
@@ -1278,7 +1354,7 @@ export default function App() {
             className="w-full justify-start text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl"
           >
             <LogOut className="w-5 h-5 mr-3" />
-            {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
+            {isSigningOut ? 'Cerrando sesi├│n...' : 'Cerrar sesi├│n'}
           </Button>
         </div>
       </aside>
@@ -1299,7 +1375,7 @@ export default function App() {
                 : activeTab === 'incomes'
                 ? 'Clientes y Cobranzas'
                 : activeTab === 'autos'
-                ? 'Control de Vehículos'
+                ? 'Control de Veh├¡culos'
                 : activeTab === 'clm'
                 ? 'CLM - Prospectos'
                 : activeTab === 'monthly-expenses'
@@ -1310,7 +1386,7 @@ export default function App() {
                 ? 'Consumo Inteligente'
                 : activeTab === 'tickets'
                 ? 'Cargar ticket'
-                : 'Configuración'}
+                : 'Configuraci├│n'}
             </h2>
           </div>
 
@@ -1334,8 +1410,8 @@ export default function App() {
               onClick={handleSignOut}
               disabled={isSigningOut}
               className="rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 md:hidden"
-              aria-label="Cerrar sesión"
-              title="Cerrar sesión"
+              aria-label="Cerrar sesi├│n"
+              title="Cerrar sesi├│n"
             >
               <LogOut className="h-5 w-5" />
             </Button>
@@ -1393,7 +1469,7 @@ export default function App() {
                   <div>
                     <p className="text-sm font-bold">Se detectaron datos locales antiguos</p>
                     <p className="text-xs opacity-80">
-                      ¿Deseas migrar tus gastos previos a la nueva base de datos de Supabase?
+                      ┬┐Deseas migrar tus gastos previos a la nueva base de datos de Supabase?
                     </p>
                   </div>
                 </div>
@@ -1405,7 +1481,7 @@ export default function App() {
                       setConfirmConfig({
                         isOpen: true,
                         title: 'Descartar datos antiguos',
-                        description: '¿Estás seguro de que deseas descartar los datos antiguos? Esta acción no se puede deshacer.',
+                        description: '┬┐Est├ís seguro de que deseas descartar los datos antiguos? Esta acci├│n no se puede deshacer.',
                         confirmLabel: 'Descartar',
                         variant: 'destructive',
                         onConfirm: () => {
@@ -1438,7 +1514,7 @@ export default function App() {
               >
                 <Bell className="w-5 h-5 shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold">Error de sincronización</p>
+                  <p className="text-sm font-bold">Error de sincronizaci├│n</p>
                   <p className="text-xs opacity-90">{error}</p>
                 </div>
                 <Button 
@@ -1620,7 +1696,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Diálogo de Confirmación Genérico */}
+      {/* Di├ílogo de Confirmaci├│n Gen├®rico */}
       <Dialog 
         open={confirmConfig.isOpen} 
         onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, isOpen: open }))}
@@ -1656,7 +1732,7 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Opción de Eliminación Compleja (Gasto con historial) */}
+      {/* Di├ílogo de Opci├│n de Eliminaci├│n Compleja (Gasto con historial) */}
       <Dialog 
         open={deleteChoiceConfig.isOpen} 
         onOpenChange={(open) => setDeleteChoiceConfig(prev => ({ ...prev, isOpen: open }))}
@@ -1673,11 +1749,11 @@ export default function App() {
                 </p>
                 {deleteChoiceConfig.hasDuplicate && (
                   <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-blue-800 text-sm">
-                    <p className="font-bold mb-1">¡Duplicado detectado!</p>
+                    <p className="font-bold mb-1">┬íDuplicado detectado!</p>
                     <p>Parece ser un duplicado de: <span className="font-black italic">"{deleteChoiceConfig.duplicateName}"</span></p>
                   </div>
                 )}
-                <p>¿Qué deseas hacer?</p>
+                <p>┬┐Qu├® deseas hacer?</p>
               </div>
             </DialogDescription>
           </DialogHeader>

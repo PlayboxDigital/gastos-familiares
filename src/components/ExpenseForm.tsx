@@ -1,46 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription 
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
-import { Expense, Priority, PaymentStatus } from '../types';
-import { CATEGORIES, RESPONSIBLES, PRIORITIES } from '../constants';
+import { Expense, PaymentStatus, Priority } from '../types';
+import { RESPONSIBLES, PRIORITIES } from '../constants';
 import { format } from 'date-fns';
 
 const CATEGORY_OPTIONS = [
-  'Almacén',
-  'Verdulería',
-  'Carnicería',
-  'Kiosco',
-  'Comida rápida',
-  'Supermercado',
+  'Vivienda',
+  'Comida',
+  'Servicios',
+  'Vehículos',
+  'Hijos',
+  'Suscripciones',
+  'Salud',
   'Transporte',
-  'Nafta',
-  'Farmacia',
-  'Limpieza',
-  'Otros',
+  'Mascotas',
+  'Viajes',
+  'Familia',
+  'Ocio / Regalos',
+  'Gastos varios',
 ] as const;
-
-type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
 
 interface ExpenseFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (expense: Omit<Expense, 'id'> & { id?: string; tipo_gasto?: 'fijo' | 'variable'; pagado?: boolean }) => void;
+  onSubmit: (
+    expense: Omit<Expense, 'id'> & {
+      id?: string;
+      tipo_gasto?: 'fijo' | 'variable';
+      pagado?: boolean;
+    }
+  ) => void;
   expenseToEdit?: Expense | null;
   defaultTipoGasto?: 'fijo' | 'variable';
 }
 
-export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, expenseToEdit, defaultTipoGasto = 'fijo' }) => {
+export const ExpenseForm: React.FC<ExpenseFormProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  expenseToEdit,
+  defaultTipoGasto = 'variable',
+}) => {
+  const montoRef = useRef<HTMLInputElement | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [formData, setFormData] = useState<Omit<Expense, 'id'>>({
     fecha: format(new Date(), 'yyyy-MM-dd'),
     monto: 0,
-    categoria: CATEGORIES[0].categoria,
+    categoria: CATEGORY_OPTIONS[0],
     subcategoria: '',
     responsable: RESPONSIBLES[0],
     prioridad: 'Importante',
@@ -48,10 +72,13 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
     estado_pago: 'Pendiente',
     fecha_pago: null,
     dia_vencimiento: new Date().getDate(),
-    tipo_gasto: 'fijo',
+    tipo_gasto: 'variable',
+    tipo: 'Variable',
   });
 
   useEffect(() => {
+    setShowAdvanced(false);
+
     if (expenseToEdit) {
       setFormData({
         fecha: expenseToEdit.fecha,
@@ -63,8 +90,16 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         concepto: expenseToEdit.concepto || '',
         estado_pago: expenseToEdit.estado_pago || 'Pendiente',
         fecha_pago: expenseToEdit.fecha_pago || null,
-        dia_vencimiento: expenseToEdit.dia_vencimiento || (expenseToEdit.fecha ? new Date(expenseToEdit.fecha + 'T12:00:00').getDate() : new Date().getDate()),
-        tipo_gasto: expenseToEdit.tipo_gasto || (expenseToEdit.tipo?.toLowerCase() === 'variable' ? 'variable' : 'fijo'),
+        dia_vencimiento:
+          expenseToEdit.dia_vencimiento ||
+          (expenseToEdit.fecha
+            ? new Date(`${expenseToEdit.fecha}T12:00:00`).getDate()
+            : new Date().getDate()),
+        tipo_gasto:
+          expenseToEdit.tipo_gasto ||
+          (expenseToEdit.tipo?.toLowerCase() === 'variable'
+            ? 'variable'
+            : 'fijo'),
         tipo: expenseToEdit.tipo || 'Fijo',
         monto_final_a_pagar: expenseToEdit.monto_final_a_pagar,
         saldo_a_favor_aplicado: expenseToEdit.saldo_a_favor_aplicado,
@@ -75,271 +110,436 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSub
         cuota_actual: expenseToEdit.cuota_actual,
         fecha_inicio_cuotas: expenseToEdit.fecha_inicio_cuotas,
         monto_cuota: expenseToEdit.monto_cuota,
-        // Preservar campos que no están en el formulario pero son parte del modelo
-        ...((expenseToEdit as any).id_pago_original ? { id_pago_original: (expenseToEdit as any).id_pago_original } : {}),
+        ...((expenseToEdit as any).id_pago_original
+          ? { id_pago_original: (expenseToEdit as any).id_pago_original }
+          : {}),
       });
-    } else {
-      setFormData({
-        fecha: format(new Date(), 'yyyy-MM-dd'),
-        monto: 0,
-        categoria: CATEGORY_OPTIONS[0],
-        subcategoria: '',
-        responsable: RESPONSIBLES[0],
-        prioridad: 'Importante',
-        concepto: '',
-        estado_pago: 'Pendiente',
-        fecha_pago: null,
-        dia_vencimiento: new Date().getDate(),
-        tipo_gasto: defaultTipoGasto,
-        tipo: defaultTipoGasto === 'variable' ? 'Variable' : 'Fijo',
-      });
+      return;
     }
+
+    setFormData({
+      fecha: format(new Date(), 'yyyy-MM-dd'),
+      monto: 0,
+      categoria: CATEGORY_OPTIONS[0],
+      subcategoria: '',
+      responsable: RESPONSIBLES[0],
+      prioridad: 'Importante',
+      concepto: '',
+      estado_pago: 'Pendiente',
+      fecha_pago: null,
+      dia_vencimiento: new Date().getDate(),
+      tipo_gasto: defaultTipoGasto,
+      tipo: defaultTipoGasto === 'variable' ? 'Variable' : 'Fijo',
+    });
   }, [expenseToEdit, isOpen, defaultTipoGasto]);
 
-  const handleChange = React.useCallback((field: keyof Omit<Expense, 'id'>, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => montoRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  const handleChange = React.useCallback(
+    (field: keyof Omit<Expense, 'id'>, value: any) => {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    },
+    []
+  );
+
+  const handlePaidChange = (paid: boolean) => {
+    const status: PaymentStatus = paid ? 'Pagado' : 'Pendiente';
+
+    setFormData((prev) => ({
+      ...prev,
+      estado_pago: status,
+      fecha_pago: paid
+        ? prev.fecha_pago || format(new Date(), 'yyyy-MM-dd')
+        : null,
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Prevenir doble envío si fuera necesario (aunque aquí es síncrono para el padre)
+
+    if (!formData.subcategoria.trim()) return;
+    if (!formData.monto || formData.monto <= 0) return;
+
     const normalizedData = {
       ...formData,
-      fecha_pago: formData.estado_pago === 'Pendiente' ? null : (formData.fecha_pago || null),
-      dia_vencimiento: formData.tipo_gasto === 'variable' ? undefined : formData.dia_vencimiento,
+      subcategoria: formData.subcategoria.trim(),
+      concepto: formData.concepto?.trim() || '',
+      fecha_pago:
+        formData.estado_pago === 'Pendiente'
+          ? null
+          : formData.fecha_pago || formData.fecha,
+      dia_vencimiento:
+        formData.tipo_gasto === 'variable'
+          ? undefined
+          : formData.dia_vencimiento,
       pagado: formData.estado_pago === 'Pagado',
     };
-    
+
     onSubmit({ ...normalizedData, id: expenseToEdit?.id });
     onClose();
   };
 
+  const isPaid = formData.estado_pago === 'Pagado';
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-md:p-0 max-md:gap-0 sm:max-w-[500px] max-md:max-h-[75dvh] overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto modal-scroll px-6 md:px-8 py-6">
-          <DialogHeader className="mb-6 pt-4 md:pt-0">
-            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tight">
-              {expenseToEdit ? 'Editar Gasto' : 'Nuevo Gasto'}
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 font-medium">
-              Completa los detalles para mantener el control.
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="
+          !w-[94vw]
+          !max-w-[760px]
+          sm:!max-w-[760px]
+          max-h-[92vh]
+          p-0
+          overflow-hidden
+          rounded-3xl
+        "
+      >
+        <div className="flex max-h-[92vh] min-w-0 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 md:px-7 md:py-6">
+            <DialogHeader className="mb-6 text-left">
+              <DialogTitle className="text-2xl font-black tracking-tight text-slate-900">
+                {expenseToEdit ? 'Editar gasto' : 'Nuevo gasto'}
+              </DialogTitle>
+              <DialogDescription className="font-medium text-slate-500">
+                Cargá lo esencial. El resto queda en “Más opciones”.
+              </DialogDescription>
+            </DialogHeader>
 
-          <form id="expense-form" onSubmit={handleSubmit} className="space-y-6 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fecha" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Fecha de inicio</Label>
-                <Input 
-                  id="fecha" 
-                  type="date" 
-                  value={formData.fecha}
-                  onChange={(e) => handleChange('fecha', e.target.value)}
-                  required
-                  className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="monto" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Monto ($)</Label>
-                <Input 
-                  id="monto" 
-                  type="number" 
-                  inputMode="decimal"
-                  step="0.01"
-                  value={formData.monto || ''}
-                  onChange={(e) => handleChange('monto', parseFloat(e.target.value))}
-                  required
-                  placeholder="0.00"
-                  className="h-12 sm:h-10 bg-slate-50 border-none font-black text-lg sm:text-base rounded-xl"
-                />
-              </div>
-            </div>
+            <form id="expense-form" onSubmit={handleSubmit}>
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="subcategoria"
+                      className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500"
+                    >
+                      ¿Qué pagaste?
+                    </Label>
+                    <Input
+                      id="subcategoria"
+                      value={formData.subcategoria}
+                      onChange={(e) =>
+                        handleChange('subcategoria', e.target.value)
+                      }
+                      required
+                      autoComplete="off"
+                      placeholder="Ej: Farmacia, Carrefour, Netflix..."
+                      className="h-14 rounded-2xl border-slate-200 bg-slate-50 text-base font-bold"
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="subcategoria" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Subcategoría / Concepto</Label>
-              <Input 
-                id="subcategoria" 
-                value={formData.subcategoria}
-                onChange={(e) => handleChange('subcategoria', e.target.value)}
-                required
-                placeholder="Ej: Supermercado, Alquiler..."
-                className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="monto"
+                      className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500"
+                    >
+                      Monto
+                    </Label>
+                    <Input
+                      id="monto"
+                      ref={montoRef}
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={formData.monto || ''}
+                      onChange={(e) =>
+                        handleChange(
+                          'monto',
+                          e.target.value === ''
+                            ? 0
+                            : Number(e.target.value)
+                        )
+                      }
+                      required
+                      placeholder="$ 0"
+                      className="h-14 rounded-2xl border-slate-200 bg-slate-50 text-xl font-black"
+                    />
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Categoría</Label>
-                <Select 
-                  value={formData.categoria} 
-                  onValueChange={(v) => handleChange('categoria', v)}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500">
+                      Categoría
+                    </Label>
+                    <Select
+                      value={formData.categoria}
+                      onValueChange={(value) =>
+                        handleChange('categoria', value)
+                      }
+                    >
+                      <SelectTrigger className="h-13 rounded-2xl border-slate-200 bg-slate-50">
+                        <SelectValue placeholder="Elegir categoría" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        {CATEGORY_OPTIONS.map((category) => (
+                          <SelectItem
+                            key={category}
+                            value={category}
+                            className="rounded-lg"
+                          >
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500">
+                      Responsable
+                    </Label>
+                    <Select
+                      value={formData.responsable}
+                      onValueChange={(value) =>
+                        handleChange('responsable', value)
+                      }
+                    >
+                      <SelectTrigger className="h-13 rounded-2xl border-slate-200 bg-slate-50">
+                        <SelectValue placeholder="Elegir responsable" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        {RESPONSIBLES.map((responsible) => (
+                          <SelectItem
+                            key={responsible}
+                            value={responsible}
+                            className="rounded-lg"
+                          >
+                            {responsible}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="fecha"
+                      className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500"
+                    >
+                      Fecha
+                    </Label>
+                    <Input
+                      id="fecha"
+                      type="date"
+                      value={formData.fecha}
+                      onChange={(e) =>
+                        handleChange('fecha', e.target.value)
+                      }
+                      required
+                      className="h-13 rounded-2xl border-slate-200 bg-slate-50"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500">
+                      Estado
+                    </Label>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePaidChange(!isPaid)}
+                      className={`
+                        flex h-[52px] w-full items-center justify-between
+                        rounded-2xl border px-4 text-left transition
+                        ${
+                          isPaid
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : 'border-slate-200 bg-slate-50'
+                        }
+                      `}
+                    >
+                      <div>
+                        <div className="text-sm font-black text-slate-800">
+                          {isPaid ? 'Ya está pagado' : 'Queda pendiente'}
+                        </div>
+                        <div className="text-xs font-medium text-slate-500">
+                          Tocá para cambiar
+                        </div>
+                      </div>
+
+                      <div
+                        className={`
+                          relative h-7 w-12 shrink-0 rounded-full transition
+                          ${isPaid ? 'bg-emerald-500' : 'bg-slate-300'}
+                        `}
+                      >
+                        <div
+                          className={`
+                            absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all
+                            ${isPaid ? 'left-6' : 'left-1'}
+                          `}
+                        />
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {isPaid && (
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="fecha_pago"
+                      className="ml-1 text-xs font-black uppercase tracking-widest text-slate-500"
+                    >
+                      Fecha de pago
+                    </Label>
+                    <Input
+                      id="fecha_pago"
+                      type="date"
+                      value={formData.fecha_pago || ''}
+                      onChange={(e) =>
+                        handleChange('fecha_pago', e.target.value)
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((prev) => !prev)}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
                 >
-                  <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {CATEGORY_OPTIONS.map((categoria) => (
-                      <SelectItem key={categoria} value={categoria} className="rounded-lg">{categoria}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Responsable</Label>
-                <Select 
-                  value={formData.responsable} 
-                  onValueChange={(v) => handleChange('responsable', v)}
-                >
-                  <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {RESPONSIBLES.map(r => (
-                      <SelectItem key={r} value={r} className="rounded-lg">{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                  {showAdvanced ? 'Ocultar opciones' : 'Más opciones'}
+                </button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Prioridad</Label>
-                <Select 
-                  value={formData.prioridad} 
-                  onValueChange={(v) => handleChange('prioridad', v as Priority)}
-                >
-                  <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {PRIORITIES.map(p => (
-                      <SelectItem key={p} value={p} className="rounded-lg">{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formData.prioridad === 'Esencial' && (
-                  <p className="text-[10px] text-blue-600 font-bold animate-pulse ml-1">
-                    ⚠️ Pagar antes del día 10
-                  </p>
+                {showAdvanced && (
+                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-slate-500">
+                          Tipo de gasto
+                        </Label>
+                        <Select
+                          value={formData.tipo_gasto || 'variable'}
+                          onValueChange={(value: 'fijo' | 'variable') => {
+                            handleChange('tipo_gasto', value);
+                            handleChange(
+                              'tipo',
+                              value === 'variable' ? 'Variable' : 'Fijo'
+                            );
+                          }}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="variable">
+                              Variable / solo este mes
+                            </SelectItem>
+                            <SelectItem value="fijo">
+                              Mensual / fijo
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-slate-500">
+                          Prioridad
+                        </Label>
+                        <Select
+                          value={formData.prioridad}
+                          onValueChange={(value) =>
+                            handleChange(
+                              'prioridad',
+                              value as Priority
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-11 rounded-xl bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PRIORITIES.map((priority) => (
+                              <SelectItem
+                                key={priority}
+                                value={priority}
+                              >
+                                {priority}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {formData.tipo_gasto === 'fijo' && (
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="dia_vencimiento"
+                          className="text-xs font-black uppercase tracking-widest text-slate-500"
+                        >
+                          Día de vencimiento
+                        </Label>
+                        <Input
+                          id="dia_vencimiento"
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={formData.dia_vencimiento || ''}
+                          onChange={(e) =>
+                            handleChange(
+                              'dia_vencimiento',
+                              parseInt(e.target.value, 10) || 0
+                            )
+                          }
+                          className="h-11 rounded-xl bg-white"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="concepto"
+                        className="text-xs font-black uppercase tracking-widest text-slate-500"
+                      >
+                        Nota / descripción
+                      </Label>
+                      <Input
+                        id="concepto"
+                        value={formData.concepto || ''}
+                        onChange={(e) =>
+                          handleChange('concepto', e.target.value)
+                        }
+                        placeholder="Opcional"
+                        className="h-11 rounded-xl bg-white"
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Gasto</Label>
-                <Select 
-                  value={formData.tipo_gasto || 'fijo'} 
-                  onValueChange={(v: 'fijo' | 'variable') => {
-                    handleChange('tipo_gasto', v);
-                    handleChange('tipo', v === 'variable' ? 'Variable' : 'Fijo');
-                  }}
-                >
-                  <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    <SelectItem value="fijo" className="rounded-lg">Mensual / fijo</SelectItem>
-                    <SelectItem value="variable" className="rounded-lg">Variable / solo este mes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            </form>
+          </div>
 
-            {formData.tipo_gasto !== 'variable' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dia_vencimiento" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Día Venc.</Label>
-                  <Input 
-                    id="dia_vencimiento" 
-                    type="number" 
-                    min="1"
-                    max="31"
-                    inputMode="numeric"
-                    value={formData.dia_vencimiento || ''}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      handleChange('dia_vencimiento', isNaN(val) ? 0 : val);
-                    }}
-                    className="h-12 sm:h-10 bg-slate-50 border-none font-bold rounded-xl"
-                    placeholder={new Date().getDate().toString()}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fecha_vencimiento_picker" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Calcular día</Label>
-                  <Input 
-                    id="fecha_vencimiento_picker" 
-                    type="date" 
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const date = new Date(e.target.value + 'T12:00:00');
-                        setFormData({ ...formData, dia_vencimiento: date.getDate() });
-                      }
-                    }}
-                    className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-                  />
-                </div>
-              </div>
-            )}
+          <DialogFooter className="shrink-0 border-t border-slate-100 bg-white px-5 py-4 md:px-7">
+            <div className="flex w-full gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onClose}
+                className="h-12 flex-1 rounded-2xl font-bold text-slate-500"
+              >
+                Cancelar
+              </Button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Estado de Pago</Label>
-                <Select 
-                  value={formData.estado_pago} 
-                  onValueChange={(v) => {
-                    const newStatus = v as PaymentStatus;
-                    handleChange('estado_pago', newStatus);
-                    handleChange('fecha_pago', newStatus === 'Pagado' ? format(new Date(), 'yyyy-MM-dd') : null);
-                  }}
-                >
-                  <SelectTrigger className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    <SelectItem value="Pendiente" className="rounded-lg">Pendiente</SelectItem>
-                    <SelectItem value="Pagado" className="rounded-lg">Pagado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {formData.estado_pago === 'Pagado' && (
-                <div className="space-y-2">
-                  <Label htmlFor="fecha_pago" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Fecha de Pago</Label>
-                  <Input 
-                    id="fecha_pago" 
-                    type="date" 
-                    value={formData.fecha_pago || ''}
-                    onChange={(e) => handleChange('fecha_pago', e.target.value)}
-                    className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-                  />
-                </div>
-              )}
+              <Button
+                form="expense-form"
+                type="submit"
+                className="h-12 flex-[2] rounded-2xl bg-slate-900 font-black text-white hover:bg-black"
+              >
+                {expenseToEdit ? 'Guardar cambios' : 'Guardar gasto'}
+              </Button>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="concepto" className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Descripción (Opcional)</Label>
-              <Input 
-                id="concepto" 
-                value={formData.concepto}
-                onChange={(e) => handleChange('concepto', e.target.value)}
-                placeholder="Nota adicional..."
-                className="h-12 sm:h-10 bg-slate-50 border-none rounded-xl"
-              />
-            </div>
-          </form>
+          </DialogFooter>
         </div>
-
-        <DialogFooter className="bg-white px-6 py-4 flex flex-row gap-3">
-          <Button type="button" variant="ghost" onClick={onClose} className="flex-1 rounded-2xl h-12 font-bold text-slate-400 active:scale-95 transition-transform">
-            Cancelar
-          </Button>
-          <Button 
-            form="expense-form"
-            type="submit" 
-            className="flex-2 bg-slate-900 hover:bg-black text-white rounded-2xl h-12 font-black uppercase tracking-widest text-xs active:scale-95 transition-transform"
-          >
-            {expenseToEdit ? 'Guardar' : 'Registrar'}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

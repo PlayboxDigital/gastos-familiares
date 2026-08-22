@@ -121,8 +121,44 @@ export const gastosService = {
   },
 
   async crearGasto(gasto: ExpenseInput): Promise<Expense> {
-    // Excluir tipo_gasto del payload enviado a Supabase ya que la columna no existe
-    const { tipo_gasto, ...payload } = gasto;
+    // Ignorar cualquier familia_id o creado_por enviado por el caller
+    const { tipo_gasto, familia_id: _ignoredFamily, creado_por: _ignoredCreator, ...expenseData } = gasto;
+
+    // Obtener usuario autenticado
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      throw new Error('No se pudo identificar la familia o el usuario de esta sesión.');
+    }
+    const userId = userData.user.id;
+
+    // Obtener membresías activas del usuario y exigir exactamente una
+    const { data: memberships, error: membershipError } = await supabase
+      .from('familia_miembros')
+      .select('familia_id')
+      .eq('user_id', userId)
+      .eq('activo', true);
+
+    if (membershipError) {
+      throw new Error('No se pudo verificar la familia activa de la sesión.');
+    }
+
+    if (!Array.isArray(memberships) || memberships.length === 0) {
+      throw new Error('No se pudo identificar la familia o el usuario de esta sesión.');
+    }
+    if (memberships.length > 1) {
+      throw new Error('No se pudo determinar de forma unívoca la familia activa.');
+    }
+
+    const familiaId = (memberships[0] as any).familia_id;
+    if (!familiaId) {
+      throw new Error('No se pudo identificar la familia o el usuario de esta sesión.');
+    }
+
+    const payload: any = {
+      ...expenseData,
+      familia_id: familiaId,
+      creado_por: userId,
+    };
 
     const { data, error } = await supabase
       .from('gastos')
@@ -142,7 +178,8 @@ export const gastosService = {
     console.log("SAVE_PAYLOAD:", gasto);
 
     // Excluir tipo_gasto del payload enviado a Supabase ya que la columna no existe
-    const { tipo_gasto, ...payload } = gasto;
+    // Ignorar cualquier familia_id o creado_por que venga del caller
+    const { tipo_gasto, familia_id: _ignoredFamily, creado_por: _ignoredCreator, ...payload } = gasto;
 
     const { data: responseData, error } = await supabase
       .from('gastos')

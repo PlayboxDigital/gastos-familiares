@@ -92,6 +92,58 @@ export const gastosPagosHistorialService = {
     return this.crearPagoHistorial(pago);
   },
 
+  /**
+   * Nueva implementación atómica que delega en la RPC `public.registrar_pago_por_periodo`.
+   * Mantener la firma compatible con `GastoPagoHistorialInput`.
+   * No realiza select/update/insert desde el cliente; la lógica de acumulación y conflicto
+   * debe resolverse en la RPC en la base de datos.
+   */
+  async registrarPagoPorPeriodoAtomic(pago: GastoPagoHistorialInput): Promise<GastoPagoHistorial> {
+    // Mapear campos del payload a los parámetros de la RPC (p_*)
+    const params: any = {
+      p_gasto_id: pago.gasto_id,
+      p_periodo_anio: pago.periodo_anio,
+      p_periodo_mes: pago.periodo_mes,
+      p_fecha_pago: pago.fecha_pago,
+      p_monto_pagado: pago.monto_pagado,
+      p_moneda: pago.moneda,
+      p_forma_pago: pago.forma_pago,
+      p_servicio_clave: pago.servicio_clave,
+      p_entidad_pago: pago.entidad_pago || null,
+      p_referencia_pago: pago.referencia_pago || null,
+      p_titular_medio_pago: (pago as any).titular_medio_pago || null,
+      p_cuotas: (pago as any).cuotas || null,
+      p_observaciones: pago.observaciones || null,
+      // Cloudinary fields (si están presentes)
+      p_comprobante_nombre_original: (pago as any).comprobante_nombre_original || null,
+      p_comprobante_cloudinary_public_id: (pago as any).comprobante_cloudinary_public_id || null,
+      p_comprobante_cloudinary_url: (pago as any).comprobante_cloudinary_url || null,
+      p_comprobante_cloudinary_secure_url: (pago as any).comprobante_cloudinary_secure_url || null,
+      p_comprobante_cloudinary_resource_type: (pago as any).comprobante_cloudinary_resource_type || null,
+      p_comprobante_cloudinary_format: (pago as any).comprobante_cloudinary_format || null,
+      p_comprobante_cloudinary_bytes: (pago as any).comprobante_cloudinary_bytes || null,
+      p_comprobante_cloudinary_width: (pago as any).comprobante_cloudinary_width || null,
+      p_comprobante_cloudinary_height: (pago as any).comprobante_cloudinary_height || null,
+      p_comprobante_transformado_url: (pago as any).comprobante_transformado_url || null,
+      p_comprobante_hash: (pago as any).comprobante_hash || null,
+    };
+
+    // Llamada a la RPC
+    const { data, error } = await supabase.rpc('registrar_pago_por_periodo', params);
+    if (error) {
+      console.error('ERROR RPC registrar_pago_por_periodo:', error);
+      throw new Error(`Error en RPC registrar_pago_por_periodo: ${error.message}`);
+    }
+
+    // Supabase puede devolver objeto o array; normalizamos
+    if (Array.isArray(data)) {
+      if (data.length === 0) throw new Error('RPC registrar_pago_por_periodo devolvió array vacío');
+      return data[0] as GastoPagoHistorial;
+    }
+
+    return data as GastoPagoHistorial;
+  },
+
   async eliminarPagoHistorial(pagoId: string): Promise<void> {
     const { error } = await supabase
       .from('gastos_pagos_historial')

@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 import { cloudinaryService } from '../services/cloudinary';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { getMontoExigible } from '../utils/expenseLogic';
+import { getMontoExigible, getExpensePeriodStatus } from '../utils/expenseLogic';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -62,7 +62,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const expenseData = expense;
 
   const montoBase = expenseData?.monto ?? 0;
-  const totalAbonado = expenseData?.total_abonado ?? 0;
 
   const estadoVencimiento = useMemo(() => {
     if (!expenseData) return 'en_plazo';
@@ -106,8 +105,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const saldoAFavorAplicado = Math.max(0, montoBase - montoExigible);
 
   const restanteReal = useMemo(() => {
-    return Math.max(0, montoExigible - totalAbonado);
-  }, [montoExigible, totalAbonado]);
+    if (!expenseData) return 0;
+    const paidThisPeriod = getExpensePeriodStatus(
+      expenseData,
+      new Date().getFullYear(),
+      new Date().getMonth() + 1,
+    ).paidAmount;
+    return Math.max(0, montoExigible - paidThisPeriod);
+  }, [montoExigible, expenseData]);
 
   const [formData, setFormData] = useState({
     fecha_pago: format(new Date(), 'yyyy-MM-dd'),
@@ -156,12 +161,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   }, [restanteReal, montoPagadoSeguro]);
 
   const porcentajePagado = useMemo(() => {
+    if (!expenseData) return 100;
+    const paidThisPeriod = getExpensePeriodStatus(
+      expenseData,
+      formData.periodo_anio,
+      formData.periodo_mes,
+    ).paidAmount;
     if (montoExigible <= 0) return 100;
     return Math.min(
       100,
-      ((totalAbonado + Math.min(montoPagadoSeguro, restanteReal)) / montoExigible) * 100
+      ((paidThisPeriod + Math.min(montoPagadoSeguro, restanteReal)) / montoExigible) * 100
     );
-  }, [montoExigible, totalAbonado, montoPagadoSeguro, restanteReal]);
+  }, [montoExigible, expenseData, formData.periodo_anio, formData.periodo_mes, montoPagadoSeguro, restanteReal]);
 
   const canSubmit = useMemo(() => {
     return !!expenseData && !!formData.fecha_pago && montoPagadoSeguro > 0 && !isUploading;
@@ -321,20 +332,18 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
               </div>
             )}
 
-            {totalAbonado > 0 && (
-              <div className="col-span-2 space-y-1">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span>Total abonado: <span className="font-bold">${totalAbonado.toLocaleString()}</span></span>
-                  <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
-                </div>
-                <div className="h-1 overflow-hidden rounded-full bg-white/20">
-                  <div
-                    className="h-full bg-white transition-all duration-500"
-                    style={{ width: `${porcentajePagado}%` }}
-                  />
-                </div>
+            <div className="col-span-2 space-y-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <span>Pagado en este periodo: <span className="font-bold">${getExpensePeriodStatus(expenseData!, formData.periodo_anio, formData.periodo_mes).paidAmount.toLocaleString()}</span></span>
+                <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
               </div>
-            )}
+              <div className="h-1 overflow-hidden rounded-full bg-white/20">
+                <div
+                  className="h-full bg-white transition-all duration-500"
+                  style={{ width: `${porcentajePagado}%` }}
+                />
+              </div>
+            </div>
           </div>
         </DialogHeader>
 

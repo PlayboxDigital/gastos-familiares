@@ -50,6 +50,8 @@ export interface Expense {
   id: string;
   fecha: string;
   monto: number;
+  familia_id?: string;
+  creado_por?: string;
   total_abonado?: number; // Calculado por la base (trigger)
   categoria: string;
   subcategoria: string;
