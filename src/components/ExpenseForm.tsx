@@ -245,7 +245,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
                     </Label>
                     {formData.monto_variable ? (
                       <div className="flex h-14 items-center rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-4 text-sm font-bold text-amber-800">
-                        El importe se carga al momento de pagar
+                        El monto se carga al momento de pagar
                       </div>
                     ) : <Input
                       id="monto"
@@ -451,7 +451,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
                       <div className="space-y-2">
                         <Label className="text-xs font-black uppercase tracking-widest text-slate-500">
-                          Importe
+                          Monto
                         </Label>
                         <Select
                           value={formData.monto_variable ? 'variable' : 'known'}
@@ -463,8 +463,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="known">Monto conocido</SelectItem>
-                            <SelectItem value="variable">A definir al pagar</SelectItem>
+                            <SelectItem value="known">Fijo</SelectItem>
+                            <SelectItem value="variable">Variable</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
