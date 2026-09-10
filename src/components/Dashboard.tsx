@@ -324,6 +324,16 @@ const getPaidForMonth = React.useCallback((
         );
         const paidConsidered = Math.min(paid, montoExigible);
         const pending = Math.max(0, montoExigible - paid);
+        const variableAmount = isVariableAmountExpense(expense);
+        const periodStatus = getExpensePeriodStatus(
+          expense,
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1,
+          history
+        ).status;
+        const shouldAppearPending = variableAmount
+          ? periodStatus !== 'Pagado'
+          : pending > 0;
         const deadline = expense.dia_vencimiento
           ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), expense.dia_vencimiento)
           : parseISO(expense.fecha);
@@ -333,12 +343,17 @@ const getPaidForMonth = React.useCallback((
           required: montoExigible,
           paid: paidConsidered,
           pending,
-          variableAmount: isVariableAmountExpense(expense),
+          variableAmount,
+          shouldAppearPending,
           deadline,
-          status: isBefore(deadline, new Date()) ? 'Vencido' : 'Pendiente',
+          status: periodStatus === 'Pagado'
+            ? 'Pagado'
+            : isBefore(deadline, new Date())
+              ? 'Vencido'
+              : 'Pendiente',
         };
       })
-      .filter(row => row.pending > 0 || row.variableAmount),
+      .filter(row => row.shouldAppearPending),
     [monthlyExpenses, history, currentMonth]
   );
 
@@ -356,14 +371,21 @@ const getPaidForMonth = React.useCallback((
           required
         );
         const pending = Math.max(0, required - paid);
+        const variableAmount = isVariableAmountExpense(expense);
+        const paidThisPeriod = getPaidAmountForPeriod(
+          expense.id,
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1,
+          history
+        );
         return {
           id: expense.id,
           concept: expense.subcategoria || expense.concepto || expense.categoria,
-          amount: paid + pending,
-          variableAmount: isVariableAmountExpense(expense),
+          amount: variableAmount ? paidThisPeriod : paid + pending,
+          amountUnknown: variableAmount && paidThisPeriod === 0,
         };
       })
-      .filter(row => row.amount > 0 || row.variableAmount),
+      .filter(row => row.amount > 0 || row.amountUnknown),
     [monthlyExpenses, history, currentMonth]
   );
 
@@ -1056,7 +1078,7 @@ const getPaidForMonth = React.useCallback((
                   {projectedCommitmentRows.map(row => (
                     <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3 w-full min-w-0">
                       <p className="break-words whitespace-normal text-sm font-bold text-slate-700">{row.concept}</p>
-                      <p className="shrink-0 font-black text-rose-600 whitespace-nowrap">{row.variableAmount ? 'A definir' : `$${row.amount.toLocaleString('es-AR')}`}</p>
+                      <p className="shrink-0 font-black text-rose-600 whitespace-nowrap">{row.amountUnknown ? 'A definir' : `$${row.amount.toLocaleString('es-AR')}`}</p>
                     </div>
                   ))}
                 </KpiDetailSection>
