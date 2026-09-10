@@ -58,6 +58,7 @@ export interface Expense {
   responsable: string;
   prioridad: Priority;
   tipo_gasto?: 'fijo' | 'variable'; // Prompt 087
+  monto_variable?: boolean;
   tipo?: string; 
   concepto?: string;
   estado_pago: PaymentStatus;

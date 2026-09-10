@@ -63,6 +63,7 @@ import {
   getPaidAmountForPeriod,
   getPaymentEffectivePeriod,
   getPendingAmountForPeriod,
+  isVariableAmountExpense,
   isExpenseApplicableInMonth,
 } from '../utils/expenseLogic';
 import {
@@ -370,7 +371,10 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
   const pendingEvents = useMemo<FinancialEvent[]>(
     () =>
       monthlyRows
-        .filter((row) => row.pending > 0 && row.source !== 'vehicle')
+        .filter((row) =>
+          row.source !== 'vehicle' &&
+          (row.pending > 0 || (row.expense && isVariableAmountExpense(row.expense) && row.status !== 'Pagado'))
+        )
         .map((row) => ({
           id: `pending:${row.id}`,
           expenseId: row.id,
@@ -707,14 +711,18 @@ export const MonthlyStatus: React.FC<MonthlyStatusProps> = ({
                   <TableCell>
                     <Badge variant="outline" className={statusBadge[row.status]}>{row.status}</Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap font-black">{money.format(row.amount)}</TableCell>
+                  <TableCell className="whitespace-nowrap font-black">
+                    {row.expense && isVariableAmountExpense(row.expense) && row.status !== 'Pagado'
+                      ? 'A definir'
+                      : money.format(row.amount)}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={sourceBadge[row.source]}>{row.origin}</Badge>
                   </TableCell>
                   <TableCell>
                     {row.expense && row.source !== 'vehicle' ? (
                       <div className="flex gap-1">
-                        {row.pending > 0 && (
+                        {(row.pending > 0 || (row.expense && isVariableAmountExpense(row.expense) && row.status !== 'Pagado')) && (
                           <Button size="icon" variant="ghost" aria-label="Pagar" disabled={updatingPaymentIds.has(row.expense.id)} onClick={() => onPay(row.expense!)}>
                             <CreditCard className="h-4 w-4 text-emerald-600" />
                           </Button>

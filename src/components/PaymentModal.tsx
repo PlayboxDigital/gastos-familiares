@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Expense, GastoPagoHistorialInput } from '../types';
+import { Expense, GastoPagoHistorial, GastoPagoHistorialInput } from '../types';
 import { PAYMENT_METHODS, DB_PAYMENT_METHOD_MAP } from '../constants';
 import { format, parseISO } from 'date-fns';
 import {
@@ -39,13 +39,14 @@ import {
 } from 'lucide-react';
 import { cloudinaryService } from '../services/cloudinary';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { getMontoExigible, getExpensePeriodStatus } from '../utils/expenseLogic';
+import { getMontoExigible, getExpensePeriodStatus, isVariableAmountExpense } from '../utils/expenseLogic';
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (pago: GastoPagoHistorialInput) => void;
   expense: Expense | null;
+  history?: GastoPagoHistorial[];
 }
 
 const MONTHS = [
@@ -58,6 +59,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onClose,
   onConfirm,
   expense,
+  history = [],
 }) => {
   const expenseData = expense;
 
@@ -110,9 +112,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       expenseData,
       new Date().getFullYear(),
       new Date().getMonth() + 1,
+      history,
     ).paidAmount;
     return Math.max(0, montoExigible - paidThisPeriod);
-  }, [montoExigible, expenseData]);
+  }, [montoExigible, expenseData, history]);
 
   const [formData, setFormData] = useState({
     fecha_pago: format(new Date(), 'yyyy-MM-dd'),
@@ -153,12 +156,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   }, [formData.monto_pagado]);
 
   const nuevoSaldoAFavorPreview = useMemo(() => {
+    if (expenseData && isVariableAmountExpense(expenseData)) return 0;
     return Math.max(0, montoPagadoSeguro - restanteReal);
-  }, [montoPagadoSeguro, restanteReal]);
+  }, [montoPagadoSeguro, restanteReal, expenseData]);
 
   const saldoPendientePostPago = useMemo(() => {
+    if (expenseData && isVariableAmountExpense(expenseData)) return 0;
     return Math.max(0, restanteReal - montoPagadoSeguro);
-  }, [restanteReal, montoPagadoSeguro]);
+  }, [restanteReal, montoPagadoSeguro, expenseData]);
 
   const porcentajePagado = useMemo(() => {
     if (!expenseData) return 100;
@@ -166,13 +171,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       expenseData,
       formData.periodo_anio,
       formData.periodo_mes,
+      history,
     ).paidAmount;
+    if (isVariableAmountExpense(expenseData)) {
+      return paidThisPeriod > 0 ? 100 : 0;
+    }
     if (montoExigible <= 0) return 100;
     return Math.min(
       100,
       ((paidThisPeriod + Math.min(montoPagadoSeguro, restanteReal)) / montoExigible) * 100
     );
-  }, [montoExigible, expenseData, formData.periodo_anio, formData.periodo_mes, montoPagadoSeguro, restanteReal]);
+  }, [montoExigible, expenseData, formData.periodo_anio, formData.periodo_mes, montoPagadoSeguro, restanteReal, history]);
 
   const canSubmit = useMemo(() => {
     return !!expenseData && !!formData.fecha_pago && montoPagadoSeguro > 0 && !isUploading;
@@ -313,13 +322,13 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-emerald-50 opacity-90">
             <div className="flex items-center justify-between text-[11px]">
               <span>Monto base:</span>
-              <span className="font-bold">${montoBase.toLocaleString()}</span>
+              <span className="font-bold">{isVariableAmountExpense(expenseData) ? 'A definir' : `$${montoBase.toLocaleString()}`}</span>
             </div>
 
             <div className="flex items-center justify-between text-[11px]">
               <span>Monto a pagar:</span>
               <span className="font-black text-xs">
-                ${montoExigible.toLocaleString()}
+                {isVariableAmountExpense(expenseData) ? 'A definir' : `$${montoExigible.toLocaleString()}`}
               </span>
             </div>
 
@@ -334,8 +343,8 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
 
             <div className="col-span-2 space-y-1">
               <div className="flex items-center justify-between text-[10px]">
-                <span>Pagado en este periodo: <span className="font-bold">${getExpensePeriodStatus(expenseData!, formData.periodo_anio, formData.periodo_mes).paidAmount.toLocaleString()}</span></span>
-                <span>Restante: <span className="font-black">${restanteReal.toLocaleString()}</span></span>
+                <span>Pagado en este periodo: <span className="font-bold">${getExpensePeriodStatus(expenseData!, formData.periodo_anio, formData.periodo_mes, history).paidAmount.toLocaleString()}</span></span>
+                <span>Restante: <span className="font-black">{isVariableAmountExpense(expenseData) ? 'A definir' : `$${restanteReal.toLocaleString()}`}</span></span>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-white/20">
                 <div
@@ -391,7 +400,7 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
 
               <div className="space-y-1">
                 <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                  Monto Pago
+                  {isVariableAmountExpense(expenseData) ? '¿Cuánto pagaste?' : 'Monto Pago'}
                 </Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
@@ -400,7 +409,8 @@ const optimizedUrl = cloudinaryService.getOptimizedUrl(uploadRes.secure_url, {
                     step="0.01"
                     min="0"
                     inputMode="decimal"
-                    value={formData.monto_pagado}
+                    value={formData.monto_pagado || ''}
+                    placeholder="$ 0"
                     onChange={(e) => handleMontoChange(e.target.value)}
                     required
                     className="h-10 border-none bg-slate-50 pl-7 font-black text-emerald-700 focus-visible:ring-emerald-500 rounded-xl text-base"

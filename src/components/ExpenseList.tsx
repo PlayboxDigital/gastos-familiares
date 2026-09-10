@@ -23,6 +23,7 @@ import {
   getPaidAmountForPeriod,
   getPendingAmountForPeriod,
   isExpenseApplicableInMonth,
+  isVariableAmountExpense,
 } from '../utils/expenseLogic';
 
 interface ExpenseListProps {
@@ -53,6 +54,7 @@ const getEstadoPagoReal = (
     const month = currentMonth.getMonth() + 1;
     const paidThisPeriod = getPaidAmountForPeriod(expense.id, year, month, history);
 
+    if (isVariableAmountExpense(expense)) return paidThisPeriod > 0 ? 'Pagado' : 'Pendiente';
     if (montoExigible <= 0) return 'Pagado';
     if (paidThisPeriod >= montoExigible) return 'Pagado';
     if (paidThisPeriod > 0) return 'Parcial';
@@ -61,6 +63,7 @@ const getEstadoPagoReal = (
   }
 
   const totalAbonado = expense.total_abonado ?? 0;
+  if (isVariableAmountExpense(expense)) return totalAbonado > 0 ? 'Pagado' : 'Pendiente';
   if (montoExigible <= 0) return 'Pagado';
   if (totalAbonado >= montoExigible) return 'Pagado';
   if (totalAbonado > 0) return 'Parcial';
@@ -491,7 +494,7 @@ const estadoPagoReal =
                       <div className="flex flex-col items-end">
                         <div className="flex flex-col items-end leading-none gap-0.5">
                           <span className="font-black text-slate-900 text-sm">
-                            ${montoExigible.toLocaleString()}
+                            {isVariableAmountExpense(e) ? 'A definir' : `$${montoExigible.toLocaleString()}`}
                           </span>
 
                           {e.monto === 1600000 && montoExigible === 1100000 && (

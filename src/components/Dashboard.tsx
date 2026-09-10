@@ -39,7 +39,7 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, isSameMon
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEstadoVencimiento } from '../estadoVencimiento';
-import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getExpensePeriodStatus, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
+import { generateExpenseOccurrences, isVariableExpense, isFixedExpense, isVariableAmountExpense, getMontoExigible, getPaidAmountForPeriod, getExpensePaymentStatusForPeriod, getExpensePeriodStatus, getPendingAmountForPeriod, getPaymentEffectivePeriod } from '../utils/expenseLogic';
 import { MonthlyFinancialSummary } from '../utils/monthlyFinancialSummary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import DashboardDetailDialog from './DashboardDetailDialog';
@@ -333,11 +333,12 @@ const getPaidForMonth = React.useCallback((
           required: montoExigible,
           paid: paidConsidered,
           pending,
+          variableAmount: isVariableAmountExpense(expense),
           deadline,
           status: isBefore(deadline, new Date()) ? 'Vencido' : 'Pendiente',
         };
       })
-      .filter(row => row.pending > 0),
+      .filter(row => row.pending > 0 || row.variableAmount),
     [monthlyExpenses, history, currentMonth]
   );
 
@@ -359,9 +360,10 @@ const getPaidForMonth = React.useCallback((
           id: expense.id,
           concept: expense.subcategoria || expense.concepto || expense.categoria,
           amount: paid + pending,
+          variableAmount: isVariableAmountExpense(expense),
         };
       })
-      .filter(row => row.amount > 0),
+      .filter(row => row.amount > 0 || row.variableAmount),
     [monthlyExpenses, history, currentMonth]
   );
 
@@ -1015,14 +1017,14 @@ const getPaidForMonth = React.useCallback((
                       <div className="min-w-0 w-full">
                         <p className="break-words whitespace-normal font-black text-slate-900">{row.concept}</p>
                         <p className="mt-1 text-xs font-bold text-slate-500">
-                          Exigible: ${row.required.toLocaleString('es-AR')} · Pagado: ${row.paid.toLocaleString('es-AR')}
+                          Exigible: {row.variableAmount ? 'A definir' : `$${row.required.toLocaleString('es-AR')}`} · Pagado: ${row.paid.toLocaleString('es-AR')}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
                           <span className={row.status === 'Vencido' ? 'text-rose-600' : 'text-amber-600'}>{row.status}</span>
                           <span className="text-slate-400">Vence {format(row.deadline, 'dd MMM yyyy', { locale: es })}</span>
                         </div>
                       </div>
-                      <p className="shrink-0 font-black tabular-nums text-amber-600 text-right whitespace-nowrap">${row.pending.toLocaleString('es-AR')}</p>
+                      <p className="shrink-0 font-black tabular-nums text-amber-600 text-right whitespace-nowrap">{row.variableAmount ? 'A definir' : `$${row.pending.toLocaleString('es-AR')}`}</p>
                     </div>
                   </div>
                 ))}
@@ -1054,7 +1056,7 @@ const getPaidForMonth = React.useCallback((
                   {projectedCommitmentRows.map(row => (
                     <div key={row.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-3 w-full min-w-0">
                       <p className="break-words whitespace-normal text-sm font-bold text-slate-700">{row.concept}</p>
-                      <p className="shrink-0 font-black text-rose-600 whitespace-nowrap">${row.amount.toLocaleString('es-AR')}</p>
+                      <p className="shrink-0 font-black text-rose-600 whitespace-nowrap">{row.variableAmount ? 'A definir' : `$${row.amount.toLocaleString('es-AR')}`}</p>
                     </div>
                   ))}
                 </KpiDetailSection>

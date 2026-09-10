@@ -42,7 +42,7 @@ import { AutoList } from './components/AutoList';
 import { CLMList } from './components/CLMList';
 import { ExpenseList } from './components/ExpenseList';
 import { MonthlyStatus } from './components/MonthlyStatus';
-import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense } from './utils/expenseLogic';
+import { generateExpenseOccurrences, getMontoExigible, isExpenseApplicableInMonth, isVariableExpense, isVariableAmountExpense } from './utils/expenseLogic';
 import { getMonthlyFinancialSummary } from './utils/monthlyFinancialSummary';
 import { useAuth } from './hooks/useAuth';
 
@@ -83,6 +83,7 @@ const getEstadoPagoReal = (
   const montoExigible = getMontoExigible(expense);
   const totalAbonado = totalAbonadoOverride ?? expense.total_abonado ?? 0;
 
+  if (isVariableAmountExpense(expense)) return totalAbonado > 0 ? 'Pagado' : 'Pendiente';
   if (montoExigible <= 0) return 'Pagado';
   if (totalAbonado >= montoExigible) return 'Pagado';
   if (totalAbonado > 0) return 'Parcial';
@@ -1653,6 +1654,7 @@ const savedPago = await gastosPagosHistorialService.registrarPagoPorPeriodoAtomi
         onClose={() => setIsPaymentModalOpen(false)}
         onConfirm={handleConfirmPayment}
         expense={selectedExpense}
+        history={globalHistory}
       />
 
       <PaymentHistoryModal

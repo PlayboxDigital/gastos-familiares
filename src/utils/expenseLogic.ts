@@ -15,6 +15,10 @@ export const isFixedExpense = (expense: Expense) => {
   return expense.tipo === 'Fijo';
 };
 
+export const isVariableAmountExpense = (expense: Expense) => {
+  return expense.monto_variable === true;
+};
+
 /**
  * Helper interno para parseo seguro de fechas.
  */
@@ -129,6 +133,8 @@ export const generateExpenseOccurrences = (expense: Expense, referenceDate: Date
 };
 
 export const getMontoExigible = (expense: Expense, targetDate?: Date): number => {
+  if (isVariableAmountExpense(expense)) return 0;
+
   const installment = getInstallmentConfig(expense);
   if (installment) {
     const monthIndex = getInstallmentMonthIndex(expense, targetDate || new Date());
@@ -178,6 +184,9 @@ export const getExpensePaymentStatusForPeriod = (
   historyEntries: GastoPagoHistorial[] = []
 ): PaymentStatus => {
   const paidThisPeriod = getPaidAmountForPeriod(expense.id, year, month, historyEntries);
+  if (isVariableAmountExpense(expense)) {
+    return paidThisPeriod > 0 ? 'Pagado' : 'Pendiente';
+  }
   const montoExigible = getMontoExigible(expense, new Date(year, month - 1, 1));
 
   if (montoExigible <= 0) return 'Pagado';
@@ -201,6 +210,14 @@ export const getExpensePeriodStatus = (
   historyEntries: GastoPagoHistorial[] = []
 ): ExpensePeriodStatus => {
   const paidAmount = getPaidAmountForPeriod(expense.id, year, month, historyEntries);
+  if (isVariableAmountExpense(expense)) {
+    return {
+      paidAmount,
+      dueAmount: 0,
+      remainingAmount: 0,
+      status: paidAmount > 0 ? 'Pagado' : 'Pendiente',
+    };
+  }
   const dueAmount = getMontoExigible(expense, new Date(year, month - 1, 1));
   const remainingAmount = Math.max(0, dueAmount - paidAmount);
 
